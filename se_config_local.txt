@@ -1,0 +1,7 @@
+# config file for harmoni_source_extractor.py
+datacube_file = /Users/gooding/Desktop/IMBH_PPM/imbh_5hours/6093_sources_0l_imbh_reduced_SNR_scaled.fits
+dir = /Users/gooding/Desktop/IMBH_PPM/imbh_5hours
+prefix = 6093_sources_0l_imbh
+prepare = False
+detection_threshold = 3
+fwhm = 2
