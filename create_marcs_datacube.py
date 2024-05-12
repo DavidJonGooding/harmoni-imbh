@@ -2,8 +2,8 @@ import sys
 
 import numpy as np
 from astropy.io import fits
-from astropy import units as u
-from astropy.constants import c
+# from astropy import units as u
+# from astropy.constants import c
 import os
 from os import path
 import random
@@ -15,11 +15,12 @@ import ppxf.sps_util as lib
 ppxf_dir = path.dirname(path.realpath(lib.__file__))
 
 
-def create_harmoni_datacube(cube_shape, wavelength_center, spec_resolution, angular_resolution):
+def create_harmoni_datacube(cube_shape, spec_step, angular_resolution, band_start):
     # Create an empty datacube with the specified dimensions, wavelength range, and header information
     # Create an empty datacube
     datacube = np.zeros(cube_shape)
 
+    # Create a FITS header
     header = fits.Header()
     header['SIMPLE'] = True
     header['BITPIX'] = -32
@@ -32,8 +33,8 @@ def create_harmoni_datacube(cube_shape, wavelength_center, spec_resolution, angu
 
     # Wavelength axis information
     header['CRPIX3'] = 1
-    header['CRVAL3'] = wavelength_center
-    header['CDELT3'] = spec_resolution
+    header['CRVAL3'] = band_start
+    header['CDELT3'] = spec_step
     header['CUNIT3'] = 'angstrom'
     header['CTYPE3'] = 'wavelength'
 
@@ -47,18 +48,22 @@ def create_harmoni_datacube(cube_shape, wavelength_center, spec_resolution, angu
 
     # Other information
     header['BUNIT'] = 'erg/s/cm2/AA/arcsec2'
-    header['SPECRES'] = spec_resolution
+    band_middle = 16250
+    marcs_resolution = 20000
+    spec_res = band_middle / marcs_resolution
+    header['SPECRES'] = spec_res
 
     return datacube, header
 
 
-def open_marcs_spectra(directory):
+def open_marcs_spectra(directory, quiet):
     # Get the list of files in the directory
     file_list = os.listdir(directory)
 
-    # Filter out directories and non-ASC files from the list
+    # Filter out directories and non-FLX files from the list
     file_list = [f for f in file_list if os.path.isfile(os.path.join(directory, f)) and f.endswith('.flx')]
-    print(file_list)
+    if not quiet:
+        print('Template spectra file list:', file_list)
 
     if len(file_list) == 0:
         print("No FLX files found in the directory.")
@@ -70,10 +75,10 @@ def open_marcs_spectra(directory):
     # Get the full file path
     file_path = os.path.join(directory, random_file)
 
-    # Open the ASC file
+    # Open the .FLX file
     try:
         with open(file_path) as f:
-            # Access the data from the ASC file
+            # Access the data from the .FLX file
             data = np.loadtxt(f, skiprows=0, usecols=0)
             # header = f.readline()
             print("Data shape:", data.shape)
@@ -82,182 +87,267 @@ def open_marcs_spectra(directory):
     return data
 
 
-def rebin_spectrum_bspline(wavelengths, spectrum, delta_lambda_target):
+def rebin_spectrum_bspline(wavelengths, spectrum, hsim_lam):
     """
     Rebin a spectrum to a constant spectral resolution in terms of wavelength using a B-spline fit.
 
     Parameters:
     - wavelengths: 1D numpy array with the original wavelengths in Angstroms.
     - spectrum: 1D numpy array with the flux values of the original spectrum.
-    - delta_lambda_target: Target spectral resolution in Angstroms.
+    - hsim_lam: 1D numpy array with the wavelengths of the rebinned spectrum.
 
     Returns:
-    - new_wavelengths: 1D numpy array with the rebinned wavelengths.
     - new_spectrum: 1D numpy array with the rebinned spectrum.
     """
     # Create a B-spline representation of the spectrum
-    t, c, k = make_interp_spline(wavelengths, spectrum, k=3).tck
-    bspline = BSpline(t, c, k)
+    # t, c, k = make_interp_spline(wavelengths, spectrum, k=3).tck
+    # bspline = BSpline(t, c, k)
 
-    # Define the new wavelength grid
-    new_wavelengths = np.arange(wavelengths[0], wavelengths[-1], delta_lambda_target)
+    # Evaluate the B-spline at the HSIM wavelengths
+    # new_spectrum = bspline(hsim_lam)
 
-    # Evaluate the B-spline on the new wavelength grid
-    new_spectrum = bspline(new_wavelengths)
+    new_spectrum = np.interp(hsim_lam, wavelengths, spectrum)   # TODO - test in notebook, compare to bspline
 
-    return new_wavelengths, new_spectrum
+    return new_spectrum
 
 
-def scale_vega(wavelengths, spectrum, target_mag=23, quiet=False):
+def scale_vega(wavelengths, spectrum, a, quiet, target_mag=23):
     """
-    Scale a spectrum to match a target magnitude.
+    Scale a spectrum to match a target magnitude in J band using Vega as a reference.
+
+    Parameters:
+    - wavelengths: 1D numpy array with the wavelengths of the spectrum.
+    - spectrum: 1D numpy array with the flux values of the spectrum.
+    - a: Dictionary with the Vega spectrum data.
+    - quiet: Boolean indicating whether to print debug information.
+    - target_mag: Target magnitude in the H band (default is 23).
+
+    Returns:
+    - wavelengths: 1D numpy array with the wavelengths of the scaled spectrum.
+    - spectrum_new: 1D numpy array with the flux values of the scaled spectrum.
     """
+
+    # Define constants
     c = 299792.458  # speed of light in km/s
     velscale = c * np.log(wavelengths[1] / wavelengths[0])  # eq.(8) of Cappellari (2017)
-
-    bands = ['2MASS/J']  # ['Johnson-Cousins_I', 'SDSS/i', '2MASS/J', '2MASS/H', '2MASS/K']
+    band = ['2MASS/H']  # ['Johnson-Cousins_I', 'SDSS/i', '2MASS/J', '2MASS/H', '2MASS/K']
     z = 0.00093  # group redshift of LMC
 
-    # ppxf logrebin function
+    # Ppxf log rebin function
     ln_flux, ln_lambda, vs = util.log_rebin(wavelengths, spectrum)
 
-    # calculate flux in defined band
-    result = util.synthetic_photometry(ln_flux, np.exp(ln_lambda), bands, redshift=z, quiet=1)
+    # Calculate flux in defined band
+    result = util.synthetic_photometry(ln_flux, np.exp(ln_lambda), band, redshift=z, quiet=1)
+    # result = util.synthetic_photometry(spectrum, wavelengths, band, redshift=z, quiet=1)
 
-    # load Vega spectrum
-    a = np.load(ppxf_dir + '/sps_models/spectra_sun_vega.npz')  # Spectrum in cgs/A
+    # Load Vega flux
     flux_vega = a["flux_vega"]
 
-    # rebin vega spectrum to match input spectrum
+    # Rebin Vega spectrum to match input spectrum
     flux_vega_new, ln_lam_vega, velscale = util.log_rebin(a["lam"], flux_vega, velscale)
 
-    # calculate flux of Vega in defined band
-    result_vega = util.synthetic_photometry(flux_vega_new, np.exp(ln_lam_vega), bands, redshift=z, quiet=1)
+    # Calculate flux of Vega in defined band
+    result_vega = util.synthetic_photometry(flux_vega_new, np.exp(ln_lam_vega), band, redshift=z, quiet=1)
+    # result_vega = util.synthetic_photometry(flux_vega, a["lam"], band, redshift=z, quiet=1)
 
-    # calculate magnitude of input spectrum
+    # Calculate magnitude of input spectrum
     mag = -2.5 * np.log10(result.flux / result_vega.flux)
 
-    # calculate delta magnitude
+    # Calculate delta magnitude
     delta_m = target_mag - mag
 
-    # scale input spectrum to match target magnitude
+    # Scale input spectrum to match target magnitude
     ln_flux_new = ln_flux * 10 ** (delta_m / -2.5)
     spectrum_new = spectrum * 10 ** (delta_m / -2.5)  # TODO: check this is correct
 
-    # calculate flux of scaled spectrum in defined band - just to check
-    result_new = util.synthetic_photometry(ln_flux_new, np.exp(ln_lambda), bands, redshift=z, quiet=1)
-
-    # calculate magnitude of scaled spectrum - just to check
-    mag_new = -2.5 * np.log10(result_new.flux / result_vega.flux)
-
     if not quiet:
-        print('Target magnitude: ', target_mag)  # try with 0 and plot to see if same as Vega
+        # Calculate flux of scaled spectrum in defined band - just to check
+        result_new = util.synthetic_photometry(ln_flux_new, np.exp(ln_lambda), band, redshift=z, quiet=1)
+        # result_new = util.synthetic_photometry(spectrum_new, wavelengths, band, redshift=z, quiet=1)
+
+        # Calculate magnitude of scaled spectrum - just to check
+        mag_new = -2.5 * np.log10(result_new.flux / result_vega.flux)
+
+        print('Target magnitude: ', target_mag)
         print('Magnitude of input spectrum: ', mag)
         print('Delta to Vega: ', delta_m)
         print('Magnitude of scaled spectrum: ', mag_new)
 
-    return ln_lambda, spectrum_new
+        print(spectrum_new)
+
+        # plt.plot(ln_lambda, spectrum_new)
+        # plt.show()
+        # plt.plot(wavelengths, spectrum_new)
+        # plt.show()
+
+    return spectrum_new    # ln_lambda, spectrum_new
 
 
-def apply_spectra_from_file_vega(datacube, header, p, n_body_file, spec_res, plot=False):
+def apply_spectra_from_file_vega(datacube, header, p, n_body_file, spec_step, hsim_lam, quiet, plot=False):
+    """
+    Apply spectra from a file to the datacube, scale magnitudes to Vega, and add them to the datacube.
+
+    Parameters:
+    - datacube: 3D numpy array with the datacube to which the spectra will be added.
+    - header: FITS header with the datacube's metadata.
+    - p: Dictionary with the parameters of the simulation.
+    - n_body_file: Path to the file containing the pixel locations and line-of-sight velocities.
+    - spec_res: Spectral resolution in Angstroms.
+    - plot: Boolean indicating whether to plot the spectra (default is False).
+
+    Returns:
+    - datacube: 3D numpy array with the updated datacube.
+    - header: FITS header with the updated metadata.
+    - nsources: Number of sources in the window.
+    """
+
+    # Load the parameters from the dictionary
     marcs_directory, fov, angular_resolution, sources, x_start, x_stop, y_start, y_stop, band = (p['marcs_directory'],
                                                                                            p['fov'], p['ang_res'],
                                                                                            p['sources'], p['x_start'],
                                                                                            p['x_stop'], p['y_start'],
                                                                                            p['y_stop'], p['band'])
-    # print out basic info
+    # Print out basic info
     print('Loading datacube with shape: ', datacube.shape)
 
-    # Load the pixel locations from the file within the field of view
-    pixel_data = np.loadtxt(n_body_file, usecols=(3, 4))
-    window_pixels = np.asarray([(x, y) for x, y in pixel_data if x_start <= x <= x_stop and y_start <= y <= y_stop])
-    print('Loading pixel coordinates from %s sources out of %s' % (len(window_pixels), len(pixel_data)))
+    # Load all stars from the file
+    all_stars = np.loadtxt(n_body_file, usecols=(3, 4, 5, 6, 7, 8, 9))
 
-    # Load line of sight velocities and magnitudes from the file
-    i_mag, j_mag, h_mag, k_mag, losv = np.loadtxt(n_body_file, usecols=(5, 6, 7, 8, 9), unpack=True)
+    # Filter stars within the field of view
+    window_stars = np.asarray([(x, y, i, j, h, k, v) for x, y, i, j, h, k, v in all_stars
+                               if x_start <= x <= x_stop and y_start <= y <= y_stop])
 
-    # limit the number of sources to use
-    j = int(sources)
-    print('Applying spectra to first %s sources in window' % j)
+    # Get the magnitudes and line-of-sight velocities
+    i_mag, j_mag, h_mag, k_mag, losv = np.transpose(window_stars)[2:]
+
+    # Get the pixel coordinates
+    # window_pixels = np.transpose(window_stars)[:2]
+    window_pixels = window_stars[:,:2]
+    print('Loading pixel coordinates from %s sources out of %s' % (len(window_stars), len(all_stars)))
+
+    # limit the number of sources to use if sources is less than the number of stars in the window
+    if sources < len(window_stars):
+        j = int(sources)
+        print('Applying spectra to first %s sources in window' % j)
+    else:
+        j = len(window_stars)
+        print('Applying spectra to all %s sources in window' % j)
 
     # Angular resolution scaling factor (sf) for pixel locations
-    #fov_x = x_stop - x_start
-    #fov_y = y_stop - y_start
-    #fov_scale_x = fov_x / 10
-    #fov_scale_y = fov_y / 10
-    #fov_scale = fov / 10
-    #scale_factor = fov_scale / angular_resolution
     sf = 1 / angular_resolution
-    #scale_factor_x = fov_scale_x / angular_resolution
-    #scale_factor_y = fov_scale_y / angular_resolution
 
-    # Load the spectrum for the pixel
-    raw_spectrum = open_marcs_spectra(marcs_directory)
+    # Load the spectrum from the MARCS library
+    raw_spectrum = open_marcs_spectra(marcs_directory, quiet)
+    print('Template spectrum of shape:', raw_spectrum.shape)
     # TODO: move into the loop when using different spectra for each star
 
     # Get MARCS wavelength data from standard file
     marcs_wavelengths = np.loadtxt(marcs_directory + '/' + 'flx_wavelengths.vac', skiprows=0, usecols=0)
 
+    # Load Vega spectrum
+    a = np.load(ppxf_dir + '/sps_models/spectra_sun_vega.npz')  # Spectrum in cgs/A
+
     # Iterate over each pixel location and apply the spectrum
-    for i in range(len(window_pixels[:j])):
+    for i in range(len(window_stars[:j])):
+
+        # Debug printing and pixel coordinates
         print('Applying spectrum to star %s' % i)
-        print('Pixel coordinates were: %s' % window_pixels[i])
         pixel_x = int((window_pixels[i][0] - x_start) * sf)
         pixel_y = int((window_pixels[i][1] - y_start) * sf)
-        print('Pixel coordinates are: x %s, y %s' % (pixel_x, pixel_y))
+        if not quiet:
+            print('Pixel coordinates were: %s' % window_pixels[i])
+            print('Pixel coordinates are: x %s, y %s' % (pixel_x, pixel_y))
 
-        # Adjust spectrum to match Vega
-        wavelengths, spectrum = scale_vega(marcs_wavelengths, raw_spectrum, target_mag=j_mag[i], quiet=1)
+        # Apply redshift of star to the raw MARCS wavelengths
+        if not quiet:
+            print('----- Redshifting -----')
+        wavelengths_z = redshift_star(marcs_wavelengths, losv[i])
 
-        # rebin spectrum with bspline interpolation to get HSIM expected resolution
-        wavelengths, spectrum = rebin_spectrum_bspline(marcs_wavelengths, spectrum, spec_res)
+        # Debug printing
+        if not quiet:
+            print('Original wavelengths: ', marcs_wavelengths)
+
+        # Adjust template spectrum to match Vega - wavelengths stay the same
+        if not quiet:
+            print('----- Scaling to Vega -----')
+        spectrum_s = scale_vega(wavelengths_z, raw_spectrum, a, quiet, target_mag=h_mag[i])
+        # wavelengths_s, spectrum_s = scale_vega(wavelengths_r, spectrum_r, a, quiet, target_mag=j_mag[i])
+
+        if not quiet:
+            print('----- Interpolating -----')
+            print('Spectrum shape:', np.shape(spectrum_s))
+
+        # Rebin spectrum with bspline interpolation to get HSIM expected resolution - using hsim_lam
+        # This is where the log spectrum is scaled to match the hsim linear wavelength resolution
+        # wavelengths, spectrum = rebin_spectrum_bspline(np.exp(wavelengths_z), spectrum_z, spec_step)
+        spectrum_r = rebin_spectrum_bspline(wavelengths_z, spectrum_s, hsim_lam)
 
         if plot:
-            plt.plot(spectrum, 'k.')
+            plt.plot(spectrum_r, 'k.')
             plt.xlabel('Pixel')
             plt.ylabel('Flux [erg/s/cm^2/Å]')
             plt.title('MARCS Spectrum')
             plt.show()
 
-        if i == 0:
-            print('Template spectrum of shape:', spectrum.shape)
+        # Crop spectra to chosen HARMONI band
+        #if not quiet:
+        #    print('----- Cropping spectrum -----')
+        #    print('Spectrum shape:', np.shape(spectrum_r))
+        #    print('Target length', len(hsim_lam))
 
-        # Apply redshift to the spectrum
-        spectrum = apply_redshift(spectrum, losv[i])
-
-        if i == 0:
-            print('Redshifted spectrum of shape:', spectrum.shape)
-
-        # crop spectra to HARMONI bands (8000-25000A)
-        spectrum, crval3 = crop_spectrum(spectrum, marcs_directory, band)
+        # OLD - used to crop spectrum here, now done in rebin_spectrum_bspline()
+        # spectrum_c, crval3 = crop_spectrum(spectrum_s, wavelengths_s, quiet, band)
+        # print(spectrum_c, crval3)
 
         # Add the spectrum to the pixel location
-        datacube, header = add_stellar_spectrum(datacube, header, pixel_x, pixel_y, spectrum, angular_resolution)
+        if not quiet:
+            print('----- Adding spectrum to datacube -----')
+        # datacube, header = add_stellar_spectrum(datacube, header, pixel_x, pixel_y,
+        #                                        spectrum_c, angular_resolution, quiet)
+        datacube = add_stellar_spectrum(datacube, pixel_x, pixel_y, spectrum_r,
+                                                angular_resolution, quiet)
 
     # print info about output
     print("Datacube created with shape:", datacube.shape)
     print("Number of sources: ", j)
 
     # Change CRVAL3 to match the first wavelength in the datacube
-    band_start, band_end = harmoni_band(band)
-    header['CRVAL3'] = crval3
+    # header['CRVAL3'] = crval3
 
     return datacube, header, len(window_pixels)
 
 
-def apply_redshift(spectrum, v):
-    # redshift  z* =  v/c + zLMC
+def redshift_star(wavelengths, v_star, z_LMC=0.00093, c=299792.458):
+    """
+    Apply redshift to a stellar spectrum considering both the LMC's group redshift
+    and the star's line-of-sight velocity.
 
-    c = 299792458  # m/s
-    z_lmc = 0.00093  # group redshift of LMC
-    # z_star = (v/c.to('km/s')) + z_lmc
-    z_star = (v / (c / 1000)) + z_lmc
-    # spectrum = spectrum * (1 + z_star)  # linear space
-    spectrum = spectrum * np.sqrt((1 + z_star) / (1 - z_star))  # log space
-    return spectrum
+    Parameters:
+    - wavelengths: A 1D array or list containing the wavelengths of the spectrum.
+    - spectrum: A 1D array or list containing the corresponding flux values.
+    - v_star: Line-of-sight velocity of the star relative to the LMC in km/s.
+    - z_LMC: Redshift of the LMC (default is 0.00093).
+    - c: Speed of light in km/s (default is 299792.458).
+
+    Returns:
+    - redshifted_spectrum: A 2D array or list with the same structure as the input spectrum,
+                           where the wavelengths have been redshifted.
+    """
+
+    # Calculate the redshift of the star from its velocity - RELATIVISTIC
+    # z_star = np.sqrt((1 + v_star / c) / (1 - v_star / c)) - 1
+
+    # Calculate the total redshift combining the LMC's and the star's redshifts
+    z_total = (1 + z_LMC) * (1 + v_star / c) - 1
+
+    # Apply the total redshift to the spectrum
+    wavelengths_rest = np.array(wavelengths)
+    wavelengths_observed = wavelengths_rest * (1 + z_total)
+
+    return wavelengths_observed
 
 
-def add_stellar_spectrum(datacube, header, pixel_x, pixel_y, spectrum, angular_resolution):
+def add_stellar_spectrum(datacube, pixel_x, pixel_y, spectrum, angular_resolution, quiet):
     # Validate pixel coordinates
     if pixel_x < 0 or pixel_x >= datacube.shape[2]:
         raise ValueError(f"Invalid x-coordinate. Must be within the range 0 to {datacube.shape[2] - 1}.")
@@ -265,58 +355,54 @@ def add_stellar_spectrum(datacube, header, pixel_x, pixel_y, spectrum, angular_r
         raise ValueError(f"Invalid y-coordinate. Must be within the range 0 to {datacube.shape[1] - 1}.")
 
     # Validate spectrum shape
-    # if spectrum.shape[0] != datacube.shape[0]:
-    #    raise ValueError("Spectrum shape does not match the datacube.")
+    if not quiet:
+        if spectrum.shape[0] != datacube.shape[0]:
+            print("WARNING - Spectrum shape might not match the datacube.")
 
     # convert ergs/cm2/s/Å to erg/s/cm2/AA/arcsec2
     spectrum = spectrum / (angular_resolution ** 2)
 
-    # Add the stellar spectrum to the specified pixel location
-    # select 5 pixels from H-band
-    # H_band_centre = 16000
-    # datacube[:, pixel_y, pixel_x] += spectrum[10000:10005]  # TODO change to length of full spectrum
-    # Before attempting to add, check if the slice is non-empty
-
-    # take 50 pixels from the middle of the spectrum
+    # find the middle of the band, and add the spectrum to the datacube from this point
+    # useful only when using a subsection of the band
     spectrum_middle = int(len(spectrum) / 2)
     z = int(datacube.shape[0])
 
-    datacube[:, pixel_y, pixel_x] += spectrum[int(spectrum_middle - (z / 2)):int(spectrum_middle + (z / 2))]
+    # Debug printing
+    if not quiet:
+        print('Adding spectrum of shape:', np.shape(spectrum))
+        print('Datacube shape:', np.shape(datacube))
+        print('Pixel y:', pixel_y)
+        print('Pixel x:', pixel_x)
 
-    # if spectrum[9000:9005].size > 0:
-    #    datacube[:, pixel_y, pixel_x] += spectrum[9000:9005]
-    # else:
-    #    # Handle the case where the slice is empty
-    #    # For example, you might log a warning or use a default value
-    #    print(f"Warning: Spectrum slice for indices 10000:10005 is empty.")
+    # Add the spectrum to the datacube
+    datacube[:, pixel_y, pixel_x] += spectrum   # [int(spectrum_middle - (z / 2)):int(spectrum_middle + (z / 2))]
 
-    return datacube, header
+    return datacube
 
 
-def crop_spectrum(spectrum, marcs_directory, band='H'):
-    # Get MARCS wavelength data from standard file
-    # marcs_directory = '/Users/gooding/Desktop/IMBH/templates/MARCS_library'
-    marcs_wavelengths = np.loadtxt(marcs_directory + '/' + 'flx_wavelengths.vac', skiprows=0, usecols=0)
-
-    # Define limits to wavelengths with HARMONI # TODO: confirm these are correct
-    # harmoni_blue = 8000
-    # harmoni_red = 25000
+def crop_spectrum(spectrum, wavelengths, quiet, band='H'):
 
     # Get band start and end wavelengths in Angstroms
     band_start, band_end = harmoni_band(band)
 
-    # Find extent of HARMONI band in MARCS
-    # marcs_harmoni_blue = len(marcs_wavelengths[marcs_wavelengths < harmoni_blue])
-    # marcs_harmoni_red = len(marcs_wavelengths[marcs_wavelengths < harmoni_red])
+    if not quiet:
+        print('Cropping the spectrum from %s to %s Angstroms' % (band_start, band_end))
+        print('Spectrum originally of shape:', np.shape(spectrum))
+        print('Template wavelengths')
+        print('Shape', np.shape(wavelengths), 'min', np.min(wavelengths), 'max', np.max(wavelengths))
 
     # Find extent of band in MARCS
-    marcs_band_blue = len(marcs_wavelengths[marcs_wavelengths < band_start])
-    marcs_band_red = len(marcs_wavelengths[marcs_wavelengths < band_end])
+    marcs_band_blue = len(wavelengths[wavelengths < band_start])
+    marcs_band_red = len(wavelengths[wavelengths < band_end])
 
-    # limit to HARMONI wavelengths
-    # spectrum = spectrum[marcs_harmoni_blue:marcs_harmoni_red]
+    # limit to HARMONI band wavelengths
     spectrum = spectrum[marcs_band_blue:marcs_band_red]
-    return spectrum, marcs_wavelengths[marcs_band_blue]
+
+    if not quiet:
+        print('Cropped to:')
+        print(np.shape(spectrum))
+        print('Using limit indices of %s and %s' % (marcs_band_blue, marcs_band_red))
+    return spectrum, wavelengths[-1]
 
 
 def harmoni_band(band):
@@ -359,7 +445,7 @@ def harmoni_band(band):
 
 def load_config(config_file):
     """
-    Load a configuration file and return the parameters as a dictionary.
+    Load a configuration file and return the parameters as a dictionary, handling inline comments.
     """
     # Create an empty dictionary to store the parameters
     params = {}
@@ -367,39 +453,76 @@ def load_config(config_file):
     # Open the configuration file and read the parameters
     with open(config_file) as f:
         for line in f:
-            # Skip comments
-            if line.startswith('#'):
+            # Ignore empty lines
+            if not line.strip():
+                continue
+
+            # Remove comments from the line (if present)
+            line, *comment = line.split('#', 1)
+            line = line.strip()  # Remove leading/trailing whitespace
+
+            # Skip lines that became empty after removing comments
+            if not line:
                 continue
 
             # Split the line into a key and value
-            key, value = line.split('=')
+            try:
+                key, value = line.split('=', 1)
+            except ValueError:
+                # Handle lines that don't have a '=' character, if any
+                print(f"Skipping malformed line: {line}")
+                continue
 
             # Strip whitespace from the key and value
             key = key.strip()
             value = value.strip()
 
-            # Convert the value to an integer
+            # Attempt to convert the value to an int, then float, and finally check for booleans
             try:
                 value = int(value)
             except ValueError:
-                pass
-
-            # Convert the value to a float
-            try:
-                value = float(value)
-            except ValueError:
-                pass
-
-            # Convert the value to a boolean
-            if value == 'True' or value == 'yes':
-                value = True
-            elif value == 'False' or value == 'no':
-                value = False
+                try:
+                    value = float(value)
+                except ValueError:
+                    if value in ['True', 'true', 'yes']:
+                        value = True
+                    elif value in ['False', 'false', 'no']:
+                        value = False
+                    # If the value is not a recognized boolean, leave it as a string
 
             # Store the parameter in the dictionary
             params[key] = value
 
     return params
+
+
+def split_fits_datacube(datacube, header, hsim_lam, file_name, split_parts, overlap, output_directory):
+    # Define split points depending on the number of parts and the overlap
+    naxis3 = header['NAXIS3']
+    split_points = [0] + [naxis3 // split_parts * i for i in range(1, split_parts + 1)]
+    print('Split points:', split_points)
+
+    # Create the split datacubes
+    for i in range(split_parts):
+        # Calculate the split points
+        start = max(split_points[i], 0)
+        end = min(split_points[i + 1] + overlap, naxis3)
+        print(f'Splitting datacube from {start} to {end} for part {i + 1} of {split_parts}')
+
+        # Create the split datacube
+        datacube_split = datacube[start:end, :, :]
+
+        # Update the header
+        header_split = header.copy()
+        header_split['NAXIS3'] = datacube_split.shape[0]
+        header_split['CRPIX3'] = - split_points[i + 1] + 1
+        # header_split['CRVAL3'] = header['CRVAL3'] + start * header['CDELT3']  # stays the same
+
+        # Save the split datacube to a FITS file
+        part_file_name = f'{file_name}_part{i + 1}of{split_parts}.fits'
+        fits.writeto(path.join(output_directory, part_file_name), datacube_split, header_split, overwrite=True)
+
+        print(f'Datacube saved as {part_file_name}')
 
 
 def marcs_condition(marcs_directory, harmoni_red, harmoni_blue):
@@ -414,6 +537,8 @@ def marcs_condition(marcs_directory, harmoni_red, harmoni_blue):
     marcs_wavelengths = np.loadtxt(marcs_directory + '/flx_wavelengths.vac', skiprows=0, usecols=0)
 
     # Find extent of HARMONI band in MARCS (pixel)
+    harmoni_blue = float(harmoni_blue)
+    harmoni_red = float(harmoni_red)
     marcs_harmoni_blue = len(marcs_wavelengths[marcs_wavelengths < harmoni_blue])
     marcs_harmoni_red = len(marcs_wavelengths[marcs_wavelengths < harmoni_red])
 
@@ -441,8 +566,15 @@ def marcs_condition(marcs_directory, harmoni_red, harmoni_blue):
 
 
 def main(config):
+    # Main function to create a datacube with MARCS spectra
+
     # Load the configuration file
-    p = config  # load_config('config.txt')   # p is a dictionary of parameters
+    p = config  # p is a dictionary of parameters
+
+    # Determine if quiet or not (for debug)
+    quiet = p['quiet']
+
+    # IMBH present or not
     if p['imbh_present']:
         nbody_file = p['nbody_data_imbh']
         imbh_label = 'imbh'
@@ -450,36 +582,56 @@ def main(config):
         nbody_file = p['nbody_data']
         imbh_label = 'noimbh'
 
-    # Get wavelength info
-    spec_res, lam_centre = marcs_condition(p['marcs_directory'], p['harmoni_red'], p['harmoni_blue'])
+    # Get wavelength info of the template library
+    # spec_res, lam_centre = marcs_condition(p['marcs_directory'], p['harmoni_red'], p['harmoni_blue'])
 
-    # if p['wavelength_planes'] == 0 then get the number of wavelength planes from the band and the spec res
-    if p['wavelength_planes'] == 0:
-        band_start, band_end = harmoni_band(p['band'])
-        spec_pixels = int((band_end - band_start) / spec_res)
-    else:
-        spec_pixels = p['wavelength_planes']
+    # Get the spectral step size from the config file
+    spec_step = p['spec_step']     # Config file specifies the step size in Angstroms as 0.26 A
+    # OLD -- Calculated by: del_lambda = lam_centre / R  = 16250/7104 = 2.287A, then oversampled by 4 to 0.57515A
+    # check the pixel step in wavelength for HARMONI - Consider 2.35 factor for FWHM
+    # HSIM output wavelength step: 0.000103974713349815 micron = 1.039747 A, therefore, 4x oversampling = 0.26 A
+    # TODO - change specStep to exactly 1/4 - double check its constant
+    spec_step = (0.000103974713349815 * 10000) / 4
+
+    # Get the band start and end wavelengths in Angstroms
+    band_start, band_end = harmoni_band(p['band'])
+
+    # Calculate the number of pixels in the band
+    spec_pixels = int((band_end - band_start) / spec_step)
+
+    # Create the wavelength axis for the datacube
+    hsim_lam = np.linspace(band_start, band_end, spec_pixels)
+
+    if not quiet:
+        print('Spectral pixel size: ', spec_step)
+        print('Number of spectral pixels: ', spec_pixels)
 
     # Define the shape of the datacube
     fov_x = p['x_stop'] - p['x_start']  # FoV in arcsec in x direction
     fov_y = p['y_stop'] - p['y_start']  # FoV in arcsec in y direction
-    cube_shape = (int(spec_pixels), int(fov_x / p['ang_res']),
-                  int(fov_y / p['ang_res']))  # TODO: check x and y are correct
+    cube_shape = (int(spec_pixels), int(fov_x / p['ang_res']), int(fov_y / p['ang_res']))   # ang_res is 10mas / 5
     print('Blank datacube created with shape:', cube_shape)
 
     # Create an empty datacube with the specified dimensions, wavelength range, and header information
-    datacube, header = create_harmoni_datacube(cube_shape, lam_centre, spec_res, p['ang_res'])
+    datacube, header = create_harmoni_datacube(cube_shape, spec_step, p['ang_res'], band_start)
 
-    # Apply spectra from a file
-    # datacube, header = apply_spectra_from_file_vega(datacube, header, p['marcs_directory'], nbody_file, p['fov'], p['ang_res'], spec_res, p['sources'], plot=p['plot'])
-    datacube, header, nsources = apply_spectra_from_file_vega(datacube, header, p, nbody_file, spec_res, plot=p['plot'])
+    # Apply spectra from a file, scale magnitudes to Vega, and add them to the datacube
+    datacube, header, nsources = apply_spectra_from_file_vega(datacube, header, p, nbody_file, spec_step, hsim_lam,
+                                                              quiet, plot=p['plot'])
     print('Datacube generated')
 
     # Save the datacube to a FITS file
     print('Saving datacube')
-    fits.writeto(p['output_directory'] + '/' + '%s_sources_%sl_%s.fits' %
-                 (nsources, int(p['wavelength_planes']), imbh_label), datacube, header, overwrite=True)
-    print('Datacube saved as %s_sources_%sl_%s.fits' % (int(p['sources']), int(spec_pixels), imbh_label))
+
+    datacube_name = 'rawcube_%sstars_%sfov_%s' % (nsources, fov_x, imbh_label)
+
+    fits.writeto(p['output_directory'] + '/' + datacube_name + '.fits', datacube, header, overwrite=True)
+    print('Datacube saved as', datacube_name)
+
+    # Split datacube into x number of parts
+    if p['split_parts'] > 1:
+        print('Splitting datacube into %s parts' % p['split_parts'])
+        split_fits_datacube(datacube, header, hsim_lam, datacube_name, p['split_parts'], p['overlap'], p['output_directory'])
 
 
 if __name__ == '__main__':
