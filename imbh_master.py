@@ -3,7 +3,7 @@ import subprocess
 
 def run_script(script_path, args=[]):
     """Function to run a python script using subprocess."""
-    command = ['python', script_path] + args
+    command = ['/usr/bin/python3.10', script_path] + args
     result = subprocess.run(command, text=True, capture_output=True)
     if result.returncode != 0:
         print(f"Error running {script_path}: {result.stderr}")
@@ -18,30 +18,31 @@ def main():
     path_hsim = './auto_hsim.py'
     path_merge = './merge_cubes.py'
     path_hsextractor = './harmoni_source_extractor.py'
+    master_config = './configs/imbh-config.json'
 
     # 1. Create the datacube parts
-    print("---------------------------")
+    print("------------------------------------------------------")
     print("Creating datacube...")
-    run_script(path_create)
-    print("---------------------------")
+    run_script(path_create, [master_config])
+    print("------------------------------------------------------")
 
     # 2. Process each part through HSIM
-    print("---------------------------")
+    print("------------------------------------------------------")
     print("Processing datacube parts through HSIM...")
-    run_script(path_hsim)
-    print("---------------------------")
+    run_script(path_hsim, ['-b', '-c', master_config])
+    print("------------------------------------------------------")
 
     # 3. Merge the processed parts
-    print("---------------------------")
+    print("------------------------------------------------------")
     print("Merging processed datacubes...")
-    run_script(path_merge)
-    print("---------------------------")
+    run_script(path_merge, [master_config])
+    print("------------------------------------------------------")
 
     # 4. Prepare cube for PampelMuse and extract sources
-    print("---------------------------")
+    print("------------------------------------------------------")
     print("Preparing cube for PampelMuse and extracting sources...")
-    run_script(path_hsextractor)
-    print("---------------------------")
+    run_script(path_hsextractor, [master_config])
+    print("------------------------------------------------------")
 
     print("Process completed successfully.")
 

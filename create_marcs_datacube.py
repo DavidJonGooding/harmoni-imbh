@@ -503,6 +503,14 @@ def split_fits_datacube(datacube, header, hsim_lam, file_name, split_parts, over
     split_points = [0] + [naxis3 // split_parts * i for i in range(1, split_parts + 1)]
     print('Split points:', split_points)
 
+    # create folder called 'cubeparts' in output_directory, check if it exists first
+    parts_directory = path.join(output_directory, 'cubeparts')
+    if not path.exists(parts_directory):
+        os.mkdir(parts_directory)
+        print('Directory created for split datacubes')
+    else:
+        print('Directory already exists, overwriting files...')
+
     # Create the split datacubes
     for i in range(split_parts):
         # Calculate the split points
@@ -521,7 +529,7 @@ def split_fits_datacube(datacube, header, hsim_lam, file_name, split_parts, over
 
         # Save the split datacube to a FITS file
         part_file_name = f'{file_name}_part{i + 1}of{split_parts}.fits'
-        fits.writeto(path.join(output_directory, part_file_name), datacube_split, header_split, overwrite=True)
+        fits.writeto(path.join(parts_directory, part_file_name), datacube_split, header_split, overwrite=True)
 
         print(f'Datacube saved as {part_file_name}')
 
@@ -566,7 +574,7 @@ def marcs_condition(marcs_directory, harmoni_red, harmoni_blue):
     return spec_res, marcs_middle
 
 
-def main(config):
+def main(config, output_dir):
     # Main function to create a datacube with MARCS spectra
 
     # Load the configuration file
@@ -625,13 +633,13 @@ def main(config):
 
     datacube_name = 'rawcube_%sstars_%sfov_%s' % (nsources, fov_x, imbh_label)
 
-    fits.writeto(p['output_directory'] + '/' + datacube_name + '.fits', datacube, header, overwrite=True)
+    fits.writeto(output_dir + '/' + datacube_name + '.fits', datacube, header, overwrite=True)
     print('Datacube saved as', datacube_name)
 
     # Split datacube into x number of parts
     if p['split_parts'] > 1:
         print('Splitting datacube into %s parts' % p['split_parts'])
-        split_fits_datacube(datacube, header, hsim_lam, datacube_name, p['split_parts'], p['overlap'], p['output_directory'])
+        split_fits_datacube(datacube, header, hsim_lam, datacube_name, p['split_parts'], p['overlap'], output_dir)
 
 
 if __name__ == '__main__':
@@ -646,5 +654,8 @@ if __name__ == '__main__':
     # Load configuration
     with open(config_file, 'r') as f:
         config = json.load(f)['create_marcs_datacube']
+        global_config = json.load(f)['global']
 
-    main(config)
+    output_dir = global_config['output_directory']
+
+    main(config, output_dir)
