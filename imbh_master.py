@@ -15,11 +15,11 @@ def run_script(script_path, args=[]):
 
 def main():
     # Paths to your scripts
-    path_create = './create_marcs_datacube.py'
-    path_hsim = './auto_hsim.py'
-    path_merge = './merge_cubes.py'
-    path_hsextractor = './harmoni_source_extractor.py'
-    master_config = './configs/imbh-config.json'
+    path_create = 'create_marcs_datacube.py'
+    path_hsim = 'auto_hsim.py'
+    path_merge = 'merge_cubes.py'
+    path_hsextractor = 'harmoni_source_extractor.py'
+    master_config = 'configs/imbh-config.json'
 
     # 1. Create the datacube parts
     print("------------------------------------------------------")
