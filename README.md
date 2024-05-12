@@ -11,6 +11,6 @@ Tools to simulate HARMONI observations and data reduction using HSIM, daophot, P
 
 ## Inputs
 
-Data: outputs from MICADO N-body simulations of a star cluster with and without a central IMBH
-Templates: spectra from MARCS library
-Configs: files which are used to choose settings on python routines
+1. Data: outputs from MICADO N-body simulations of a star cluster with and without a central IMBH
+2. Templates: spectra from MARCS library
+3. Configs: files which are used to choose settings on python routines

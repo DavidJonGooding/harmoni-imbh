@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import json
 
 
 def load_config(config_file):
@@ -58,7 +59,7 @@ def load_config(config_file):
     return params
 
 
-def main():
+def main(config):
     # Define the directory containing the FITS files and the output directory
     input_dir = '/mnt/zfsusers/goodingd/imbh/input_cubes/cubeparts/'     # for glamdring use
     # input_dir = './cubeparts/' # for local use
@@ -121,4 +122,14 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # Check if a configuration file was provided
+    if len(sys.argv) < 2:
+        print('Usage: python auto_hsim.py <config_file>')
+        exit()
+
+    config_file = sys.argv[1]
+    # Load configuration
+    with open(config_file, 'r') as f:
+        config = json.load(f)['auto_hsim']
+
+    main(config)

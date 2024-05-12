@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from scipy.interpolate import BSpline, make_interp_spline
 import ppxf.ppxf_util as util
 import ppxf.sps_util as lib
+import json
 
 ppxf_dir = path.dirname(path.realpath(lib.__file__))
 
@@ -590,7 +591,6 @@ def main(config):
     # OLD -- Calculated by: del_lambda = lam_centre / R  = 16250/7104 = 2.287A, then oversampled by 4 to 0.57515A
     # check the pixel step in wavelength for HARMONI - Consider 2.35 factor for FWHM
     # HSIM output wavelength step: 0.000103974713349815 micron = 1.039747 A, therefore, 4x oversampling = 0.26 A
-    # TODO - change specStep to exactly 1/4 - double check its constant
     spec_step = (0.000103974713349815 * 10000) / 4
 
     # Get the band start and end wavelengths in Angstroms
@@ -635,10 +635,16 @@ def main(config):
 
 
 if __name__ == '__main__':
+    # Check if a configuration file was provided
     if len(sys.argv) < 2:
         print("Usage: python3 create_marcs_datacube.py <config_file>")
         sys.exit(1)
 
     config_file = sys.argv[1]
-    config = load_config(config_file)
+    # config = load_config(config_file) # OLD METHOD
+
+    # Load configuration
+    with open(config_file, 'r') as f:
+        config = json.load(f)['create_marcs_datacube']
+
     main(config)
