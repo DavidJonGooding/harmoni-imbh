@@ -5,6 +5,8 @@ from os import path
 import subprocess
 import sys
 import json
+from astropy.io import fits
+import numpy as np
 
 
 def load_config(config_file):
@@ -159,17 +161,37 @@ def main(config, output_dir):
 
     print('All files processed successfully.')
 
-    # Merge output cubes
+    # Merge output cubes, named such as '_part1of5_reduced_flux_cal.fits'
+
+
+
     print('Merging output cubes...')
     output_flux_files = [f for f in os.listdir(hsim_output_dir) if f.endswith('_reduced_flux_cal.fits')]
+    output_snr_files = [f for f in os.listdir(hsim_output_dir) if f.endswith('_reduced_SNR.fits')]
     if len(output_flux_files) < 2:
         print('At least two output files are needed to merge.')
         exit()
 
     # Sort the files to ensure the correct order
     output_flux_files.sort()
+    output_snr_files.sort()
 
-    # Merge the output cubes in a loop
+    # Merge the output cubes in a loop, merge 2 to 1, 3 to the merged 1, 4 to the merged 1, and so on
+    merged_flux_file = output_flux_files[0]
+    merged_snr_file = output_snr_files[0]
+
+    for flux_file, snr_file in zip(output_flux_files[1:], output_snr_files[1:]):
+        part1_file_path = os.path.join(hsim_output_dir, merged_flux_file)
+        part2_file_path = os.path.join(hsim_output_dir, flux_file)
+        output_file_path = os.path.join(hsim_output_dir, f'merged_{merged_flux_file}')
+
+        # Merge the cubes
+        merge_fits_datacubes(part1_file_path, part2_file_path, output_file_path)
+
+        # Update the merged file name for the next iteration
+        merged_flux_file = f'merged_{merged_flux_file}'
+        merged_snr_file = f'merged_{merged_snr_file}'
+
 
 
     print('All files processed and merged successfully.')
