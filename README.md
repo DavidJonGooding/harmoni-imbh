@@ -14,3 +14,10 @@ Tools to simulate HARMONI observations and data reduction using HSIM, daophot, P
 1. Data: outputs from MICADO N-body simulations of a star cluster with and without a central IMBH
 2. Templates: spectra from MARCS library
 3. Configs: files which are used to choose settings on python routines
+
+## Dependencies
+
+1. HSIM - the HARMONI instrument simulator (https://github.com/HARMONI-ELT/HSIM)
+2. PampelMuse - PSF source extraction from integral field spectroscopy datacubes (https://pampelmuse.readthedocs.io)
+3. pPXF - stellar kinematics via full spectrum fitting with photometry
+ (https://www-astro.physics.ox.ac.uk/~cappellari/software/#ppxf)

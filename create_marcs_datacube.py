@@ -214,6 +214,8 @@ def apply_spectra_from_file_vega(datacube, header, p, n_body_file, spec_step, hs
     # Load all stars from the file
     all_stars = np.loadtxt(n_body_file, usecols=(3, 4, 5, 6, 7, 8, 9))
 
+    print('Loading pixel coordinates from %s sources' % len(all_stars))
+
     # Filter stars within the field of view
     window_stars = np.asarray([(x, y, i, j, h, k, v) for x, y, i, j, h, k, v in all_stars
                                if x_start <= x <= x_stop and y_start <= y <= y_stop])
@@ -652,10 +654,11 @@ if __name__ == '__main__':
     # config = load_config(config_file) # OLD METHOD
 
     # Load configuration
-    with open(config_file, 'r') as f:
+    with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)['create_marcs_datacube']
-        global_config = json.load(f)['global']
+        #global_config = json.load(f)['global']
 
-    output_dir = global_config['output_directory']
+    output_dir = config['output_directory']
+    # output_dir = global_config['output_directory']
 
     main(config, output_dir)

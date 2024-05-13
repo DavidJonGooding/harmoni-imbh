@@ -206,7 +206,7 @@ if __name__ == '__main__':
     config_file = sys.argv[1]
 
     # Load configuration
-    with open(config_file, 'r') as f:
+    with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)['auto_hsim']
         global_config = json.load(f)['global']
 
