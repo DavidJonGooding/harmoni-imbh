@@ -5,7 +5,7 @@ def run_script(script_path, args=[]):
     """Function to run a python script using subprocess."""
     command = ['/usr/bin/python3.10', script_path] + args
     print(f"Running command: {' '.join(command)}")
-    result = subprocess.run(command, text=True, capture_output=True)
+    result = subprocess.run(command, text=True, capture_output=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(f"Error running {script_path}: {result.stderr}")
         raise Exception(f"Script {script_path} failed")

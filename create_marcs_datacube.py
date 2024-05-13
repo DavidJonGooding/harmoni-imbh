@@ -661,4 +661,7 @@ if __name__ == '__main__':
     output_dir = config['output_directory']
     # output_dir = global_config['output_directory']
 
+    if not path.exists(output_dir):
+        os.mkdir(output_dir)
+
     main(config, output_dir)

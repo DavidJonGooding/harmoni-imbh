@@ -1,17 +1,17 @@
 {
   "global": {
-    "output_directory": "./output",
+    "output_directory": "output",
     "other_parameters": 0
   },
   "create_marcs_datacube": {
-    "output_directory": "./output",
+    "output_directory": "output",
     "fov": 10,
     "ang_res": 0.002,
     "spec_step": 0.26,
     "harmoni_blue": 8000,
     "harmoni_red": 25000,
     "band": "H",
-    "marcs_directory": "./templates",
+    "marcs_directory": "templates",
     "sources": 33037,
     "imbh_present": true,
     "nbody_data_imbh": "data/input_HARMONI_IMBH.txt",
@@ -27,7 +27,7 @@
   },
   "auto_hsim": {
     "parts_dir": "cubeparts",
-    "hsim_config": "./configs/hsim-config.json"
+    "hsim_config": "configs/hsim-config.json"
   },
   "source_extractor": {
     "prepare": true,
