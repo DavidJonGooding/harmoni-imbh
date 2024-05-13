@@ -155,7 +155,7 @@ def main(config, output_dir):
         # -b forces HSIM to start the simulation not showing the GUI
         command = f'/usr/bin/python3.10 /mnt/zfsusers/goodingd/HSIM/hsim/hsim3.py -b -c {hsim_config_path}'
         print(f'Running command: {command}')
-        subprocess.run(command, shell=True)
+        subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         print(f'Processed {file} and saved output')
 
@@ -208,8 +208,9 @@ if __name__ == '__main__':
     # Load configuration
     with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)['auto_hsim']
-        global_config = json.load(f)['global']
+        #global_config = json.load(f)['global']
 
-    output_dir = global_config['output_directory']
+    output_dir = config['output_directory']
+    # output_dir = global_config['output_directory']
 
     main(config, output_dir)

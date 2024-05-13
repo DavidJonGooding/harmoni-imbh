@@ -26,8 +26,9 @@
     "overlap": 60
   },
   "auto_hsim": {
+    "output_directory": "output",
     "parts_dir": "cubeparts",
-    "hsim_config": "configs/hsim-config.json"
+    "hsim_config": "configs/hsim-config.txt"
   },
   "source_extractor": {
     "prepare": true,
