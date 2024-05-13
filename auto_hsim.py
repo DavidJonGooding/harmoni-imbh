@@ -208,7 +208,7 @@ if __name__ == '__main__':
     # Load configuration
     with open(config_file, 'r', encoding='utf-8') as f:
         config = json.load(f)['auto_hsim']
-        #global_config = json.load(f)['global']
+        # global_config = json.load(f)['global']
 
     output_dir = config['output_directory']
     # output_dir = global_config['output_directory']

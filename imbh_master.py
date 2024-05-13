@@ -31,7 +31,7 @@ def main():
     # 2. Process each part through HSIM
     print("------------------------------------------------------")
     print("Processing datacube parts through HSIM...")
-    run_script(path_hsim, ['-b', '-c', master_config])
+    run_script(path_hsim, [master_config])
     print("------------------------------------------------------")
     print("AS-OBSERVED DATACUBES CREATED")
 
