@@ -249,19 +249,19 @@ def main(config, output_dir):
 
     for flux_file, snr_file in zip(output_flux_files[1:], output_snr_files[1:]):
         print(f'Merging {flux_file}...')
-        part1_flux_path = os.path.join(hsim_output_dir, merged_flux_file) # Takes first / original cube
-        part2_flux_path = os.path.join(hsim_output_dir, flux_file) # Takes second cube or next cube to merge
-        part1_snr_path = os.path.join(hsim_output_dir, merged_snr_file)
-        part2_snr_path = os.path.join(hsim_output_dir, snr_file)
+        part1_flux_path = path.join(hsim_output_dir, merged_flux_file) # Takes first / original cube
+        part2_flux_path = path.join(hsim_output_dir, flux_file) # Takes second cube or next cube to merge
+        part1_snr_path = path.join(hsim_output_dir, merged_snr_file)
+        part2_snr_path = path.join(hsim_output_dir, snr_file)
 
         # Merge the cubes
         merged_data, header = merge_fits_datacubes(part1_flux_path, part2_flux_path)
         merged_snr, header_snr = merge_fits_datacubes(part1_snr_path, part2_snr_path)
 
         # Save the merged datacube to a FITS file
-        merged_flux_path = os.path.join(hsim_output_dir, merged_flux_file)
+        merged_flux_path = path.join(hsim_output_dir, merged_flux_file)
         fits.writeto(merged_flux_path, merged_data, header, overwrite=True)
-        merged_snr_path = os.path.join(hsim_output_dir, merged_snr_file)
+        merged_snr_path = path.join(hsim_output_dir, merged_snr_file)
         fits.writeto(merged_snr_path, merged_snr, header_snr, overwrite=True)
         print(f'Merged {flux_file} into {merged_flux_file} and {snr_file} into {merged_snr_file}.')
 

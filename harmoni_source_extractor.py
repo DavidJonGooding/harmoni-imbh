@@ -85,7 +85,7 @@ def load_json_config(config_file):
     return config
 
 
-def prepare_datacube(config, quiet):
+def prepare_datacube(flux_file, snr_file, output_dir, quiet):
     """
     Prepare the datacube for PampelMuse by converting the CUNIT3 from micron to Angstrom, and other relevant headers
     (CRVAL3 and CDELT3 x10000). Add a second cube to account for the variances.
@@ -99,13 +99,10 @@ def prepare_datacube(config, quiet):
     '_reduced_flux_cal.fits' and '_reduced_SNR.fits' are loaded and the stdev cube is squared to get variance.
 
     """
-    # Load the configuration parameters
-    dir = config['dir']
-    prefix = config['prefix']
 
     # Load the datacubes
-    hdulist = fits.open(dir + '/' + prefix + '_reduced_flux_cal.fits')
-    stdev = fits.open(dir + '/' + prefix + '_reduced_SNR.fits')
+    hdulist = fits.open(flux_file)
+    stdev = fits.open(snr_file)
 
     if not quiet:
         hdulist.info()
@@ -120,7 +117,7 @@ def prepare_datacube(config, quiet):
     header['CTYPE3'] = 'AWAV'
     header['BUNIT'] = '10**(-20)*erg/s/cm**2/Angstrom'
 
-    # Scale the data cube by 1E12
+    # Scale the data cube by 1E12 to get it in units of '10**(-20)*erg/s/cm**2/Angstrom’
     print('Scaling data cube by 1E12...')
     hdulist[0].data = hdulist[0].data*1E12
 
@@ -128,16 +125,16 @@ def prepare_datacube(config, quiet):
     print('Adding SNR cube...')
     hdulist.append(stdev[0])
 
-    # Square the stdev cube to get variance
+    # Square the stdev cube to get variance (var = (signal/stdev)^2)
     print('Squaring stdev cube to get variance...')
     hdulist[1].data = (hdulist[0].data / hdulist[1].data)**2
 
-    # Change EXTNAME to STAT
+    # Change EXTNAME to STAT for the variance cube
     hdulist[1].header['EXTNAME'] = 'STAT'
     hdulist[0].header['EXTNAME'] = 'DATA'
 
-    # Save the datacube
-    hdulist.writeto(dir+'/'+ prefix +'_reduced_SNR_scaled.fits', overwrite=True)
+    # Save the datacube to a new file
+    hdulist.writeto(path.join(output_dir, 'merged_reduced_SNR_scaled.fits'), overwrite=True)
     print('Datacube saved successfully.')
 
     cube = hdulist[0].data
@@ -314,15 +311,17 @@ def stats_plot(config, sources, dir_output):
 
 
 # Main function that processes the datacube and detects sources
-def main(config):
+def main(config, output_dir):
 
     print('---------------------------------')
     print('HARMONI Source Extractor')
     print('---------------------------------')
 
     # Load the configuration parameters
-    dir = config['dir']
-    prefix = config['prefix']
+    # dir = config['dir']
+    # prefix = config['prefix']
+    flux_file = config['flux_file']
+    snr_file = config['snr_file']
     quiet = config['quiet']
 
     if not quiet:
@@ -333,13 +332,13 @@ def main(config):
     # Prepare the datacube for PampelMuse
     prepare = config['prepare']
     if prepare:
-        cube = prepare_datacube(config, quiet)
+        cube = prepare_datacube(flux_file, snr_file, output_dir, quiet)
         print('Datacube prepared successfully.')
     else:
         # Check for file in dir ending in _SNR_scaled.fits
-        if os.path.isfile(dir + '/' + prefix + '_reduced_SNR_scaled.fits'):
+        if os.path.isfile(path.join(output_dir, 'merged_reduced_SNR_scaled.fits')):
             print('Datacube already prepared.')
-            hdulist = fits.open(dir + '/' + prefix + '_reduced_SNR_scaled.fits')
+            hdulist = fits.open(path.join(output_dir, 'merged_reduced_SNR_scaled.fits'))
             hdulist.info()
             cube = hdulist[0].data
             print('Datacube loaded successfully.')
@@ -377,21 +376,19 @@ def main(config):
     print('Number of sources detected: {}'.format(len(sources)))
 
     # Save source information to a CSV file
-    print('Saving CSV file...')
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    # dir = os.path.dirname(config['datacube_file'])
-    dir_output = dir + '/sources'
+    print('Saving CSV files...')
+    dir_output = path.join(output_dir, 'sources')
 
     # Check if the directory exists, if not create it
     if not os.path.exists(dir_output):
         os.makedirs(dir_output)
     filename = os.path.join(dir_output, 'sources_f%s_t%s_%s.csv' % (fwhm, thresh, len(sources)))
     np.savetxt(filename, sources, delimiter=",", fmt='%s')
-    print('CSV file saved successfully:', filename)
+    print('All source data CSV file saved successfully:', filename)
 
     # Create a DataFrame for further processing and save to a CSV file
     names = sources.colnames
-    print(names)
+    # print(names)
     df = pd.DataFrame(np.asarray(sources), columns=names)
 
     # Rename and format columns for PampelMuse and save
@@ -399,8 +396,10 @@ def main(config):
     df_pm.rename(columns={"mag": "H", "xcentroid": "x", "ycentroid": "y"}, inplace=True)
     df_pm.to_csv(dir_output + '/harmoni_stars_f%s_t%s_%s_refcat.csv' % (fwhm, thresh, len(sources)),
                  index=False, header=True, sep=',')
+    print('PPM CSV file saved successfully:', dir_output + '/harmoni_stars_f%s_t%s_%s_refcat.csv' %
+          (fwhm, thresh, len(sources)))
 
-    # Plot the mean frame with the sources overlayed in red
+    # Plot the mean frame with the sources overlaid in red
     image_plot(config, mean_frame, sources, dir_output)
     stats_plot(config, sources, dir_output)
 
