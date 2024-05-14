@@ -549,6 +549,15 @@ def load_config(config_file):
     return params
 
 
+def load_json_config(config_file):
+    """
+    Load a JSON configuration file and return the parameters as a dictionary.
+    """
+    with open(config_file, 'r') as file:
+        config = json.load(file)
+    return config
+
+
 def split_fits_datacube(datacube, header, hsim_lam, file_name, split_parts, overlap, output_directory):
     # Define split points depending on the number of parts and the overlap
     naxis3 = header['NAXIS3']
@@ -703,13 +712,19 @@ if __name__ == '__main__':
     config_file = sys.argv[1]
     # config = load_config(config_file) # OLD METHOD
 
-    # Load configuration
-    with open(config_file, 'r', encoding='utf-8') as f:
-        config = json.load(f)['create_marcs_datacube']
-        #global_config = json.load(f)['global']
+    config_ = load_json_config(config_file)
 
-    output_dir = config['output_directory']
+    global_params = config_.get('global', {})
+    config = config_.get('create_marcs_datacube', {})
+
+    # Load configuration
+    # with open(config_file, 'r', encoding='utf-8') as f:
+    #     config = json.load(f)['create_marcs_datacube']
+    #     # global_config = json.load(f)['global']
+
+    # output_dir = config['output_directory']
     # output_dir = global_config['output_directory']
+    output_dir = global_params['output_directory']
 
     if not path.exists(output_dir):
         os.mkdir(output_dir)

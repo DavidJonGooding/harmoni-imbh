@@ -99,6 +99,15 @@ def load_config(config_file):
     return params
 
 
+def load_json_config(config_file):
+    """
+    Load a JSON configuration file and return the parameters as a dictionary.
+    """
+    with open(config_file, 'r') as file:
+        config = json.load(file)
+    return config
+
+
 def merge_fits_datacubes(part1_file_path, part2_file_path):
     """
     Merge two FITS datacubes with an overlapping region.
@@ -204,6 +213,7 @@ def main(config, output_dir):
         # the configuration file is specified with -c
         # -b forces HSIM to start the simulation not showing the GUI
         command = f'/usr/bin/python3.10 /mnt/zfsusers/goodingd/HSIM/hsim/hsim3.py -b -c {hsim_config_path}'
+        # TODO - make generic to run on any machine
         print(f'Running command: {command}')
         subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -266,12 +276,14 @@ if __name__ == '__main__':
 
     config_file = sys.argv[1]
 
-    # Load configuration
-    with open(config_file, 'r', encoding='utf-8') as f:
-        config = json.load(f)['auto_hsim']
-        # global_config = json.load(f)['global']
+    config_ = load_json_config(config_file)
 
-    output_dir = config['output_directory']
-    # output_dir = global_config['output_directory']
+    global_params = config_.get('global', {})
+    config = config_.get('auto_hsim', {})
+
+    output_dir = global_params['output_directory']
+
+    if not path.exists(output_dir):
+        os.mkdir(output_dir)
 
     main(config, output_dir)

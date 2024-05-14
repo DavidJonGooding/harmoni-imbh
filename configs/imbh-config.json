@@ -35,5 +35,24 @@
     "detection_threshold": 3,
     "fwhm": 2,
     "quiet": false
-  }
+  },
+  "auto_pampelmuse": {
+    "datacube_path": "path/to/datacube.fits",
+    "source_locations": "path/to/source_locations.txt",
+    "output_path": "path/to/output.fits",
+    "pampelmuse": {
+      "routines": [
+        "INITFIT",
+        "CUBEFIT",
+        "POLYFIT",
+        "CUBEFIT",
+        "GETSPECTRA"
+        ],
+      "args": [
+        "--arg1", "value1",
+        "--arg2", "value2"
+        ]
+  },
+  "losv": {
+  },
 }

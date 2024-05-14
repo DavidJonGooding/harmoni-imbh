@@ -3,7 +3,7 @@ import subprocess
 
 def run_script(script_path, args=[]):
     """Function to run a python script using subprocess."""
-    command = ['/usr/bin/python3.10', script_path] + args
+    command = ['/usr/bin/python3.10', script_path] + args   # TODO - make generic for any machine
     print(f"Running command: {' '.join(command)}")
     result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
@@ -17,8 +17,9 @@ def main():
     # Paths to your scripts
     path_create = 'create_marcs_datacube.py'
     path_hsim = 'auto_hsim.py'
-    path_merge = 'merge_cubes.py'
     path_hsextractor = 'harmoni_source_extractor.py'
+
+    # Path to the master configuration file
     master_config = 'configs/imbh-config.json'
 
     # 1. Create the datacube parts

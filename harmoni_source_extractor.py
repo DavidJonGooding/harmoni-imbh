@@ -26,6 +26,8 @@ import time
 import math
 import sys
 import os
+from os import path
+import json
 
 
 # Function to load configuration parameters from a file
@@ -72,6 +74,15 @@ def load_config(config_file):
             params[key] = value
 
     return params
+
+
+def load_json_config(config_file):
+    """
+    Load a JSON configuration file and return the parameters as a dictionary.
+    """
+    with open(config_file, 'r') as file:
+        config = json.load(file)
+    return config
 
 
 def prepare_datacube(config, quiet):
@@ -247,7 +258,7 @@ def source_detection(config, cube):
     filename = os.path.join(dir_output, 'sources_f%s_t%s_%s.csv' % (fwhm, thresh, len(sources1) + len(sources2) + len(sources3) + len(sources4) + len(sources5)))
     np.savetxt(filename, sources1, delimiter=",", fmt='%s')
 
-    # Determine if sources move
+    # Determine if sources move # TODO - write this function
     # Compare sources1 to sources2, sources2 to sources3, etc.
     # If sources move, discard
     # If sources don't move, keep
@@ -352,6 +363,7 @@ def main(config):
 
     # Detect sources with multi-snapshot method
     sources1, sources2, sources3, sources4, sources5 = source_detection(config, cube)
+    # TODO - implement this method
 
     # Detect sources in the image
     print('Detecting sources...')
@@ -396,6 +408,20 @@ def main(config):
 if __name__ == '__main__':
     # Read the configuration file from the command line argument
     config_file = sys.argv[1]
-    config = load_config(config_file)
-    # Call the main function with the loaded configuration
-    main(config)
+
+    # Check if a configuration file was provided
+    if len(sys.argv) < 2:
+        print('Usage: python harmoni_source_extractor.py <config_file>')
+        exit()
+
+    config_ = load_json_config(config_file)
+
+    global_params = config_.get('global', {})
+    config = config_.get('source_extractor', {})
+
+    output_dir = global_params['output_directory']
+
+    if not path.exists(output_dir):
+        os.mkdir(output_dir)
+
+    main(config, output_dir)
