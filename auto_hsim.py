@@ -1,4 +1,40 @@
-# Programme to open different datacube parts and automatically run HSIM on them with a set of given parameters
+# Auto_HSIM: Automates the process of running HSIM on a set of FITS files and merging the output datacubes.
+#
+# The script reads a configuration file that specifies the input directory containing the FITS files, the HSIM configuration file, and the output directory.
+# It processes each FITS file using HSIM and then merges the output datacubes.
+#
+# The script also includes a function to merge two datacubes with an overlapping region.
+# The merged datacube is saved to a new FITS file.
+#
+# Usage: python auto_hsim.py <config_file>
+# The configuration file should be in JSON format and contain the following keys:
+# - parts_dir: The directory containing the input FITS files
+# - hsim_config: The path to the HSIM configuration file
+# - output_directory: The directory to save the output datacubes
+#
+# Example configuration file:
+# {
+#     "auto_hsim": {
+#         "parts_dir": "datacubes",
+#         "hsim_config": "hsim_config.ini",
+#         "output_directory": "output"
+#     }
+# }
+# The script assumes that the HSIM configuration file is in INI format and contains the following sections:
+# [HSIM]
+# input_cube = <path_to_input_cube>
+# output_dir = <output_directory>
+# ...
+# The script modifies the input_cube and output_dir parameters in the HSIM configuration file for each FITS file processed.
+# The output datacubes are saved in the specified output directory.
+#
+# The script also merges the output datacubes by averaging the overlapping regions.
+# The merged datacubes are saved with the prefix 'merged_' in the output directory.
+#
+# The script uses the Astropy library to read and write FITS files and NumPy for array manipulation.
+# The subprocess module is used to run the HSIM script with the modified configuration file.
+#
+
 
 import os
 from os import path
@@ -7,6 +43,7 @@ import sys
 import json
 from astropy.io import fits
 import numpy as np
+import shutil
 
 
 def load_config(config_file):
@@ -62,18 +99,34 @@ def load_config(config_file):
     return params
 
 
-def merge_fits_datacubes(part1_file_path, part2_file_path, output_file_path):
+def merge_fits_datacubes(part1_file_path, part2_file_path):
+    """
+    Merge two FITS datacubes with an overlapping region.
+    The overlapping region is averaged to create a smooth transition between the two parts.
+
+    Args:
+        part1_file_path:
+        part2_file_path:
+
+    Returns:
+
+    """
     # Load the two parts of the datacube
     datacube1, header1 = fits.getdata(part1_file_path, header=True)
     datacube2, header2 = fits.getdata(part2_file_path, header=True)
 
     # Determine the overlap
-    overlap = datacube1.shape[0] + datacube2.shape[0] - header1['NAXIS3']
+    # overlap = 12 # Assumes 12 pixel overlap, simplification based on original overlap of 50 oversampled by 4x
+    # --> 50/4 = 12.5. Have changed original overlap to 60, so in future 60/4 = 15.
+    overlap = 15
+    # TODO - change overlap to be calculated based on the oversampling factor from the config file
 
     # Check if overlap is correctly calculated
     if overlap <= 0:
         print("Error: No overlap detected or incorrect file sizes.")
         return
+
+    print(f'Overlap: {overlap} pixels')
 
     # Calculate new datacube dimensions
     naxis3_new = header1['NAXIS3'] + header2['NAXIS3'] - overlap
@@ -88,8 +141,7 @@ def merge_fits_datacubes(part1_file_path, part2_file_path, output_file_path):
     merged_data[-header2['NAXIS3'] + overlap:] = datacube2[overlap:]
 
     # Average the overlapping regions
-    merged_data[header1['NAXIS3'] - overlap:header1['NAXIS3']] = (
-                                                                         datacube1[-overlap:] + datacube2[:overlap]) / 2
+    merged_data[header1['NAXIS3'] - overlap:header1['NAXIS3']] = (datacube1[-overlap:] + datacube2[:overlap]) / 2
 
     # Adjust the header information to reflect the merged datacube
     header = header1.copy()
@@ -97,9 +149,7 @@ def merge_fits_datacubes(part1_file_path, part2_file_path, output_file_path):
     header['CRVAL3'] = header1['CRVAL3']  # Assuming the reference value does not need adjustment
     header['CDELT3'] = header1['CDELT3']  # Assuming the delta does not need adjustment
 
-    # Save the merged datacube to a new FITS file
-    fits.writeto(output_file_path, merged_data, header, overwrite=True)
-    print(f'Merged datacube saved as {output_file_path}')
+    return merged_data, header
 
 
 def main(config, output_dir):
@@ -144,7 +194,7 @@ def main(config, output_dir):
         hsim_config['input_cube'] = file_path
 
         # Write the modified config file
-        with open(hsim_config, 'w') as f:
+        with open(hsim_config_path, 'w') as f:
             f.write('[HSIM]\n')
             for key, value in hsim_config.items():
                 f.write(f'{key} = {value}\n')
@@ -162,12 +212,14 @@ def main(config, output_dir):
     print('All files processed successfully.')
 
     # Merge output cubes, named such as '_part1of5_reduced_flux_cal.fits'
-
-
+    hsim_output_dir = hsim_config['output_dir']
 
     print('Merging output cubes...')
     output_flux_files = [f for f in os.listdir(hsim_output_dir) if f.endswith('_reduced_flux_cal.fits')]
+    output_flux_files = [f for f in output_flux_files if 'merged' not in f]
     output_snr_files = [f for f in os.listdir(hsim_output_dir) if f.endswith('_reduced_SNR.fits')]
+    output_snr_files = [f for f in output_snr_files if 'merged' not in f]
+
     if len(output_flux_files) < 2:
         print('At least two output files are needed to merge.')
         exit()
@@ -175,26 +227,35 @@ def main(config, output_dir):
     # Sort the files to ensure the correct order
     output_flux_files.sort()
     output_snr_files.sort()
+    print('Cubes to merge:', output_flux_files)
 
-    # Merge the output cubes in a loop, merge 2 to 1, 3 to the merged 1, 4 to the merged 1, and so on
-    merged_flux_file = output_flux_files[0]
-    merged_snr_file = output_snr_files[0]
+    # Define the merged file names
+    merged_flux_file = 'merged_reduced_flux_cal.fits'
+    merged_snr_file = 'merged_reduced_SNR.fits'
+
+    # Duplicate the first cube to merge with the rest
+    shutil.copy2(os.path.join(hsim_output_dir, output_flux_files[0]), os.path.join(hsim_output_dir, merged_flux_file))
+    shutil.copy2(os.path.join(hsim_output_dir, output_snr_files[0]), os.path.join(hsim_output_dir, merged_snr_file))
 
     for flux_file, snr_file in zip(output_flux_files[1:], output_snr_files[1:]):
-        part1_file_path = os.path.join(hsim_output_dir, merged_flux_file)
-        part2_file_path = os.path.join(hsim_output_dir, flux_file)
-        output_file_path = os.path.join(hsim_output_dir, f'merged_{merged_flux_file}')
+        print(f'Merging {flux_file}...')
+        part1_flux_path = os.path.join(hsim_output_dir, merged_flux_file) # Takes first / original cube
+        part2_flux_path = os.path.join(hsim_output_dir, flux_file) # Takes second cube or next cube to merge
+        part1_snr_path = os.path.join(hsim_output_dir, merged_snr_file)
+        part2_snr_path = os.path.join(hsim_output_dir, snr_file)
 
         # Merge the cubes
-        merge_fits_datacubes(part1_file_path, part2_file_path, output_file_path)
+        merged_data, header = merge_fits_datacubes(part1_flux_path, part2_flux_path)
+        merged_snr, header_snr = merge_fits_datacubes(part1_snr_path, part2_snr_path)
 
-        # Update the merged file name for the next iteration
-        merged_flux_file = f'merged_{merged_flux_file}'
-        merged_snr_file = f'merged_{merged_snr_file}'
+        # Save the merged datacube to a FITS file
+        merged_flux_path = os.path.join(hsim_output_dir, merged_flux_file)
+        fits.writeto(merged_flux_path, merged_data, header, overwrite=True)
+        merged_snr_path = os.path.join(hsim_output_dir, merged_snr_file)
+        fits.writeto(merged_snr_path, merged_snr, header_snr, overwrite=True)
+        print(f'Merged {flux_file} into {merged_flux_file} and {snr_file} into {merged_snr_file}.')
 
-
-
-    print('All files processed and merged successfully.')
+    print('Merging complete.')
 
 
 if __name__ == '__main__':

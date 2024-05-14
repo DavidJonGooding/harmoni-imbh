@@ -35,13 +35,7 @@ def main():
     print("------------------------------------------------------")
     print("AS-OBSERVED DATACUBES CREATED")
 
-    # 3. Merge the processed parts
-    print("------------------------------------------------------")
-    print("Merging processed datacubes...")
-    run_script(path_merge, [master_config])
-    print("------------------------------------------------------")
-
-    # 4. Prepare cube for PampelMuse and extract sources
+    # 3. Prepare cube for PampelMuse and extract sources
     print("------------------------------------------------------")
     print("Preparing cube for PampelMuse and extracting sources...")
     run_script(path_hsextractor, [master_config])

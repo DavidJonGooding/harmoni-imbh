@@ -1,9 +1,59 @@
-import sys
+# create_marcs_datacube.py is the script that generates the datacube with MARCS spectra.
+# The script is called with a configuration file as an argument, which contains the parameters for the simulation.
+# The script reads the configuration file, creates an empty datacube, applies MARCS spectra to the datacube,
+# scales the magnitudes to match Vega, and saves the datacube to a FITS file.
+# The script also splits the datacube into multiple parts if specified in the configuration file.
+# The configuration file is a JSON file with the following parameters:
+# {
+#     "marcs_directory": "path/to/marcs/directory",
+#     "fov": 1.0,
+#     "ang_res": 0.01,
+#     "sources": 100,
+#     "x_start": -0.5,
+#     "x_stop": 0.5,
+#     "y_start": -0.5,
+#     "y_stop": 0.5,
+#     "band": "H",
+#     "nbody_data": "path/to/nbody/data",
+#     "spec_step": 0.26,
+#     "quiet": false,
+#     "plot": false,
+#     "split_parts": 2,
+#     "overlap": 10,
+#     "output_directory": "path/to/output/directory"
+# }
+# The parameters are as follows:
+# - marcs_directory: Path to the directory containing the MARCS spectra.
+# - fov: Field of view in arcseconds.
+# - ang_res: Angular resolution in arcseconds per pixel.
+# - sources: Number of sources to apply spectra to in the field of view.
+# - x_start, x_stop, y_start, y_stop: Coordinates of the field of view in arcseconds.
+# - band: HARMONI band to simulate (e.g., "H", "K", "H+K").
+# - nbody_data: Path to the file containing the pixel locations and line-of-sight velocities.
+# - spec_step: Spectral step size in Angstroms.
+# - quiet: Boolean indicating whether to print debug information.
+# - plot: Boolean indicating whether to plot the spectra.
+# - split_parts: Number of parts to split the datacube into.
+# - overlap: Number of overlapping pixels between split parts.
+# - output_directory: Path to the output directory to save the datacube and split parts.
 
+# The script uses the following functions:
+# - create_harmoni_datacube: Creates an empty datacube with the specified dimensions, wavelength range, and header information.
+# - open_marcs_spectra: Opens a random MARCS spectrum file from the specified directory.
+# - rebin_spectrum_bspline: Rebins a spectrum to a constant spectral resolution in terms of wavelength using a B-spline fit.
+# - scale_vega: Scales a spectrum to match a target magnitude in J band using Vega as a reference.
+# - apply_spectra_from_file_vega: Applies spectra from a file to the datacube, scales magnitudes to Vega, and adds them to the datacube.
+# - add_stellar_spectrum: Adds a stellar spectrum to a specific pixel location in the datacube.
+# - crop_spectrum: Crops a spectrum to a specific wavelength range.
+# - harmoni_band: Returns the start and end wavelengths of a HARMONI band.
+# - load_config: Loads a configuration file and returns the parameters as a dictionary.
+# - split_fits_datacube: Splits a datacube into multiple parts with overlapping pixels.
+# - marcs_condition: Finds the wavelength step size of MARCS in the middle of the HARMONI band.
+# - main: Main function to create a datacube with MARCS spectra.
+
+import sys
 import numpy as np
 from astropy.io import fits
-# from astropy import units as u
-# from astropy.constants import c
 import os
 from os import path
 import random
