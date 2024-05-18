@@ -161,13 +161,16 @@ def merge_fits_datacubes(part1_file_path, part2_file_path):
     return merged_data, header
 
 
-def main(config, output_dir):
+def main(config, output_dir, split_parts):
     # Define the directory containing the FITS files and the output directory
-    input_dir = path.join(output_dir, config['parts_dir'])
+    if split_parts > 1:
+        input_dir = path.join(output_dir, config['parts_dir'])
+    else:
+        input_dir = output_dir
     hsim_config_path = config['hsim_config']
     hsim_output_dir = path.join(output_dir, 'hsim_output/')
 
-    # Create the output directory if it does not exist -- seems to be overwriting on glamdring
+    # Create the output directory if it does not exist
     if not os.path.exists(hsim_output_dir):
         os.makedirs(hsim_output_dir)
 
@@ -215,11 +218,16 @@ def main(config, output_dir):
         command = f'/usr/bin/python3.10 /mnt/zfsusers/goodingd/HSIM/hsim/hsim3.py -b -c {hsim_config_path}'
         # TODO - make generic to run on any machine
         print(f'Running command: {command}')
-        subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         print(f'Processed {file} and saved output')
 
     print('All files processed successfully.')
+
+    # Check if merging is needed
+    if split_parts < 2:
+        print('No merging needed.')
+        exit()
 
     # Merge output cubes, named such as '_part1of5_reduced_flux_cal.fits'
     hsim_output_dir = hsim_config['output_dir']
@@ -280,10 +288,12 @@ if __name__ == '__main__':
 
     global_params = config_.get('global', {})
     config = config_.get('auto_hsim', {})
+    create_config = config_.get('create_marcs_datacube', {})
 
     output_dir = global_params['output_directory']
+    split_parts = create_config['split_parts']
 
     if not path.exists(output_dir):
         os.mkdir(output_dir)
 
-    main(config, output_dir)
+    main(config, output_dir, split_parts)

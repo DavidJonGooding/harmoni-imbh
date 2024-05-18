@@ -585,8 +585,10 @@ def split_fits_datacube(datacube, header, hsim_lam, file_name, split_parts, over
         # Update the header
         header_split = header.copy()
         header_split['NAXIS3'] = datacube_split.shape[0]
-        header_split['CRPIX3'] = - split_points[i + 1] + 1
+        header_split['CRPIX3'] = - split_points[i] + 1
         # header_split['CRVAL3'] = header['CRVAL3'] + start * header['CDELT3']  # stays the same
+
+        # TODO - compare the wavelength vector from the above header with the original hsim_lam
 
         # Save the split datacube to a FITS file
         part_file_name = f'{file_name}_part{i + 1}of{split_parts}.fits'
