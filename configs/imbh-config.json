@@ -32,7 +32,7 @@
   },
   "source_extractor": {
     "prepare": true,
-    "flux_file": "merged_reduced_flux_cal.fits:,
+    "flux_file": "merged_reduced_flux_cal.fits",
     "snr_file": "merged_reduced_SNR.fits",
     "detection_threshold": 3,
     "fwhm": 2,

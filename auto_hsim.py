@@ -218,7 +218,7 @@ def main(config, output_dir, split_parts):
         command = f'/usr/bin/python3.10 /mnt/zfsusers/goodingd/HSIM/hsim/hsim3.py -b -c {hsim_config_path}'
         # TODO - make generic to run on any machine
         print(f'Running command: {command}')
-        subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         print(f'Processed {file} and saved output')
 
@@ -227,7 +227,7 @@ def main(config, output_dir, split_parts):
     # Check if merging is needed
     if split_parts < 2:
         print('No merging needed.')
-        exit()
+        sys.exit(1) # Exit with error code 1
 
     # Merge output cubes, named such as '_part1of5_reduced_flux_cal.fits'
     hsim_output_dir = hsim_config['output_dir']

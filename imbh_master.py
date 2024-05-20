@@ -8,6 +8,9 @@ def run_script(script_path, args=[]):
     result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(f"Error running {script_path}: {result.stderr}")
+        if result.returncode == 1:
+            print(f"Skipping to the next part as merging is not required.")
+            return False
         raise Exception(f"Script {script_path} failed")
     print(f"Output from {script_path}: {result.stdout}")
     return result

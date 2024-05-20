@@ -45,7 +45,7 @@ pip install -r requirements.txt
 2. Templates: spectra from MARCS library
 3. Configs: files which are used to choose settings on python routines
 
-## Dependencies
+### Dependencies
 
 The key major software dependencies for this repo are:
 
@@ -55,7 +55,8 @@ The key major software dependencies for this repo are:
 
 The N-body simulation data is courtesy of Fiorentino et al. (2020), found at: https://academic.oup.com/mnras/article/494/3/4413/5813442
 
-## Author
+### Author
 
 Written by David Gooding, DPhil student at the Department of Astrophysics, University of Oxford.
+
 Contact: david.gooding@physics.ox.ac.uk
