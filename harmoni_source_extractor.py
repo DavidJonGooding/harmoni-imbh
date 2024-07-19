@@ -248,7 +248,7 @@ def source_detection(config, cube):
     # Combine all sources into columns and save to a CSV file
     print('Saving CSV file...')
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    dir = os.path.dirname(config['dir'])
+    dir = os.path.dirname(config['flux_file'])
     dir_output = dir + '/sources'
     if not os.path.exists(dir_output):
         os.makedirs(dir_output)
@@ -275,7 +275,8 @@ def image_plot(config, mean_frame, sources, dir_output):
     plt.imshow(np.log(mean_frame + 1), cmap='Greys', origin='lower')#, vmin=np.log(6), vmax=np.log(2150))
     apertures.plot(color='red', lw=1.5, alpha=0.5)
 
-    prefix = config['prefix']
+    basename = os.path.basename(config['flux_file'])
+    prefix = basename.split('_reduced')[0]
     plt.savefig(dir_output + '/' + prefix + '_sources.png')
     plt.show()
 
@@ -305,7 +306,8 @@ def stats_plot(config, sources, dir_output):
     plt.tight_layout()
     plt.pause(1)
 
-    prefix = config['prefix']
+    basename = os.path.basename(config['flux_file'])
+    prefix = basename.split('_reduced')[0]
     plt.savefig(dir_output + '/' + prefix + '_sources_stats.png')
     plt.show()
 
@@ -349,6 +351,7 @@ def main(config, output_dir):
     # Find mean frame and statistics
     mean_frame = np.asarray(np.mean(cube, axis=0))
     mean, median, std = sigma_clipped_stats(mean_frame, sigma=1.0)
+    sum_frame = np.sum(cube, axis=0)
     print('Mean, median, stdev')
     print(mean, median, std)
 
@@ -361,13 +364,14 @@ def main(config, output_dir):
     print('FWHM: {}'.format(fwhm))
 
     # Detect sources with multi-snapshot method
-    sources1, sources2, sources3, sources4, sources5 = source_detection(config, cube)
+    #sources1, sources2, sources3, sources4, sources5 = source_detection(config, cube)
     # TODO - implement this method
 
     # Detect sources in the image
     print('Detecting sources...')
-    daofind = DAOStarFinder(fwhm=fwhm, threshold=thresh*std, roundlo=-0.8, roundhi=0.8)
-    sources = daofind(mean_frame - median)
+    daofind = DAOStarFinder(fwhm=fwhm, threshold=thresh*std, roundlo=-0.75, roundhi=0.75)
+    sources = daofind(sum_frame)
+    #sources = daofind(mean_frame - median)
     for col in sources.colnames:
         sources[col].info.format = '%.8g'
     print('Sources detected successfully.')
@@ -404,6 +408,8 @@ def main(config, output_dir):
     stats_plot(config, sources, dir_output)
 
 
+    ## TEMPORARY SPECTRUM EXTRACTOR
+
 if __name__ == '__main__':
     # Read the configuration file from the command line argument
     config_file = sys.argv[1]
@@ -424,3 +430,5 @@ if __name__ == '__main__':
         os.mkdir(output_dir)
 
     main(config, output_dir)
+
+#%%

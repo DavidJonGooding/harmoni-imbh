@@ -32,8 +32,8 @@
   },
   "source_extractor": {
     "prepare": true,
-    "flux_file": "merged_reduced_flux_cal.fits",
-    "snr_file": "merged_reduced_SNR.fits",
+    "flux_file": "/Users/gooding/Desktop/IMBH_PPM/R136_5/rawcube_6093stars_2fov_imbh_reduced_flux_cal.fits",
+    "snr_file": "/Users/gooding/Desktop/IMBH_PPM/R136_5/rawcube_6093stars_2fov_imbh_reduced_SNR.fits",
     "detection_threshold": 3,
     "fwhm": 2,
     "quiet": false
@@ -54,7 +54,11 @@
         "--arg1", "value1",
         "--arg2", "value2"
         ]
+    }
   },
   "losv": {
-  },
+    "spectra_path": "/Users/gooding/Desktop/IMBH_PPM/R136_5/spectra_doublemoffat",
+    "template_path": "templates",
+    "quiet": false
+  }
 }
