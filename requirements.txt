@@ -1,6 +1,7 @@
-numpy~=1.26.4
-astropy~=6.0.1
-matplotlib~=3.5.1
-scipy~=1.13.0
-pandas~=1.4.2
-photutils~=1.6.0
+astropy==6.0.1
+matplotlib==3.5.1
+numpy==2.0.0
+pandas==1.4.2
+photutils==1.6.0
+ppxf==9.2.2
+scipy==1.14.0
