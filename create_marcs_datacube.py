@@ -158,6 +158,13 @@ def rebin_spectrum_bspline(wavelengths, spectrum, hsim_lam):
     # new_spectrum = bspline(hsim_lam)
 
     new_spectrum = np.interp(hsim_lam, wavelengths, spectrum)   # TODO - test in notebook, compare to bspline
+    plt.plot(hsim_lam, new_spectrum, 'rx-', label='Rebinned spectrum')
+    plt.plot(wavelengths, spectrum, 'k.-', label='Original spectrum')
+    plt.xlabel('Wavelength [Å]')
+    plt.ylabel('Flux [erg/s/cm^2/Å]')
+    plt.title('Rebinned Spectrum')
+    plt.legend()
+    plt.show()
 
     return new_spectrum
 
@@ -223,8 +230,8 @@ def scale_vega(wavelengths, spectrum, a, quiet, target_mag=23):
         print('Magnitude of input spectrum: ', mag)
         print('Delta to Vega: ', delta_m)
         print('Magnitude of scaled spectrum: ', mag_new)
-
-        print(spectrum_new)
+        print('Original spectrum', spectrum)
+        print('Scaled spectrum', spectrum_new)
 
         # plt.plot(ln_lambda, spectrum_new)
         # plt.show()
@@ -275,7 +282,7 @@ def apply_spectra_from_file_vega(datacube, header, p, n_body_file, spec_step, hs
 
     # Get the pixel coordinates
     # window_pixels = np.transpose(window_stars)[:2]
-    window_pixels = window_stars[:,:2]
+    window_pixels = window_stars[:, :2]
     print('Loading pixel coordinates from %s sources out of %s' % (len(window_stars), len(all_stars)))
 
     # limit the number of sources to use if sources is less than the number of stars in the window
@@ -314,15 +321,27 @@ def apply_spectra_from_file_vega(datacube, header, p, n_body_file, spec_step, hs
         # Apply redshift of star to the raw MARCS wavelengths
         if not quiet:
             print('----- Redshifting -----')
+            print('losv = ', losv[i])
         wavelengths_z = redshift_star(marcs_wavelengths, losv[i])
+
+        # TEMP PLOTTING TEST
+        # plt.plot(wavelengths_z, raw_spectrum, 'rx-', label='Redshifted spectrum')
+        # plt.plot(marcs_wavelengths, raw_spectrum, 'k.-', label='Original spectrum')
+        # plt.xlabel('Wavelength [Å]')
+        # plt.ylabel('Flux [erg/s/cm^2/Å]')
+        # plt.title('Redshifted Spectrum: losv =%s' % losv[i])
+        # plt.legend()
+        # plt.show()
 
         # Debug printing
         if not quiet:
             print('Original wavelengths: ', marcs_wavelengths)
+            print('Redshifted wavelengths: ', wavelengths_z)
 
         # Adjust template spectrum to match Vega - wavelengths stay the same
         if not quiet:
             print('----- Scaling to Vega -----')
+            print('mag H:', h_mag[i])
         spectrum_s = scale_vega(wavelengths_z, raw_spectrum, a, quiet, target_mag=h_mag[i])
         # wavelengths_s, spectrum_s = scale_vega(wavelengths_r, spectrum_r, a, quiet, target_mag=j_mag[i])
 
@@ -377,25 +396,22 @@ def redshift_star(wavelengths, v_star, z_LMC=0.00093, c=299792.458):
 
     Parameters:
     - wavelengths: A 1D array or list containing the wavelengths of the spectrum.
-    - spectrum: A 1D array or list containing the corresponding flux values.
     - v_star: Line-of-sight velocity of the star relative to the LMC in km/s.
     - z_LMC: Redshift of the LMC (default is 0.00093).
     - c: Speed of light in km/s (default is 299792.458).
 
     Returns:
-    - redshifted_spectrum: A 2D array or list with the same structure as the input spectrum,
-                           where the wavelengths have been redshifted.
+    - wavelengths_observed: Array of redshifted wavelengths.
     """
 
-    # Calculate the redshift of the star from its velocity - RELATIVISTIC
+    # Calculate the redshift of the star from its velocity - RELATIVISTIC - not used
     # z_star = np.sqrt((1 + v_star / c) / (1 - v_star / c)) - 1
 
     # Calculate the total redshift combining the LMC's and the star's redshifts
     z_total = (1 + z_LMC) * (1 + v_star / c) - 1
 
     # Apply the total redshift to the spectrum
-    wavelengths_rest = np.array(wavelengths)
-    wavelengths_observed = wavelengths_rest * (1 + z_total)
+    wavelengths_observed = np.array(wavelengths) * (1 + z_total)
 
     return wavelengths_observed
 

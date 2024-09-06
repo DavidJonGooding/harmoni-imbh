@@ -342,7 +342,7 @@ def main(config, output_dir):
             print('Datacube already prepared.')
             hdulist = fits.open(path.join(output_dir, 'merged_reduced_SNR_scaled.fits'))
             hdulist.info()
-            cube = hdulist[0].data
+            cube = hdulist[1].data
             print('Datacube loaded successfully.')
         else:
             print('Datacube not prepared. Please set prepare to True in the configuration file.')

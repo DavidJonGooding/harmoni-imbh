@@ -21,6 +21,8 @@ from scipy import ndimage
 from astropy.stats import biweight_scale
 import math
 
+np.set_printoptions(threshold=sys.maxsize)
+
 
 def fits_to_array(folder_path):
     """
@@ -32,6 +34,7 @@ def fits_to_array(folder_path):
     data_list = []
     coords_list = []
     id_list = []
+    mag_list = []
 
     for filename in os.listdir(folder_path):
         if filename.endswith('.fits') and 'id' in filename:
@@ -59,6 +62,10 @@ def fits_to_array(folder_path):
                     star_id = header['HIERARCH STAR ID']
                     id_list.append(star_id)
 
+                    # Get the star magnitude
+                    star_mag = header['HIERARCH STAR MAG']
+                    mag_list.append(star_mag)
+
     wavelengths = np.arange(header['CRVAL1'], header['CRVAL1'] + header['CDELT1'] * header['NAXIS1'], header['CDELT1'])
 
     # Check if all data arrays have the same length
@@ -70,7 +77,7 @@ def fits_to_array(folder_path):
     numpy_array = np.column_stack(data_list)
 
     # Check if the column length in the array matches the number of wavelengths
-    if numpy_array.shape[1] != len(wavelengths):
+    if numpy_array.shape[0] != len(wavelengths):
         print("Data array column length does not match the number of wavelengths.")
         print("Data array shape:", numpy_array.shape)
         print("Wavelengths length:", len(wavelengths))
@@ -89,7 +96,7 @@ def fits_to_array(folder_path):
     # Rescale coordinate to be 0-indexed and in arcseconds
     coords = (np.asarray(coords_list)/100)-1
 
-    return numpy_array, coords, id_list
+    return numpy_array, coords, id_list, mag_list
 
 
 def open_marcs_spectra(directory, quiet):
@@ -134,7 +141,7 @@ def open_marcs_spectra(directory, quiet):
     templ = data[w]
     wavelengths = marcs_wavelengths[w]
 
-    return templ, wavelengths
+    return data, marcs_wavelengths #templ, wavelengths
 
 
 def clip_outliers(galaxy, bestfit, mask):
@@ -207,6 +214,7 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
     h4 = np.empty(shape1-1)
     velocities = []
     snr = []
+    snr_ppxf = []
 
     # Dubugging printing
     print('Shape1:', shape1)
@@ -231,8 +239,9 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
     start = [vel, 0.19]  # (km/s), starting guess for [V, sigma] -- start = [velStart, sigmaStart]
 
     goodpixel = np.arange(100, 3500)
+
     # make initial mask based on goodpixel
-    mask0 = np.ones_like(targets[:, 0], dtype=bool)
+    mask0 = np.zeros_like(targets[:, 0], dtype=bool)
     mask0[goodpixel] = True
 
     # looping ppxf for each star
@@ -265,19 +274,20 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
         biweight_sigma = biweight_scale(residuals)
         snr_star = median_flux / biweight_sigma
         snr = np.append(snr, snr_star)
+        snr_ppxf = np.append(snr_ppxf, sn)
 
         print('SNR:', snr_star, sn)
 
         if plot:
             # plot and print results
             pp.plot()
-            plt.title(f'Star {k} - velocity = {pp.sol[0]:.2f} km/s, snr = {sn:.2f}')
+            plt.title(f'Star {id_list[k]} - velocity = {pp.sol[0]:.2f} km/s, snr = {sn:.2f}')
             # add coordinates as text to plot
             plt.text(0.6, 0.95, f'x = {coords[k][0]:.4f}, y = {coords[k][1]:.4f}', transform=plt.gca().transAxes)
             # save plot and create directory
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
-            plt.savefig(f'%s/star_{k}_{id_list[k]}.png' % plot_path)
+            plt.savefig(f'%s/star_{id_list[k]}.png' % plot_path)
             # clear plot for next iteration
             plt.clf()
 
@@ -285,7 +295,7 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
         #print("     dV    dsigma   dh3      dh4")
         #print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
 
-    return velocities, sigma, h3, h4, snr
+    return velocities, sigma, h3, h4, snr, snr_ppxf
 
 
 # Define a function to load spectra from PampelMuse prm file
@@ -376,7 +386,7 @@ def main(config, output_dir):
 
     # Load all spectra into an array
     # folder_path = '/Users/gooding/Desktop/IMBH_PPM/R136_5/spectra/'
-    all_spectra, coords, id_list = fits_to_array(folder_path)
+    all_spectra, coords, id_list, mag_list = fits_to_array(folder_path)
 
     # Open MARCS spectra as a template, and wavelength data
     # template_path = '/Users/gooding/Desktop/IMBH/templates/MARCS_library/'
@@ -392,7 +402,6 @@ def main(config, output_dir):
 
     lamRange1 = np.transpose([np.min(all_spectra[:, 0]), np.max(all_spectra[:, 0])])
 
-
     # define empty arrays for targets and noise
     targets = np.empty((all_spectra.shape[0], all_spectra.shape[1]))
     t_noise = np.empty((all_spectra.shape[0], all_spectra.shape[1]))
@@ -400,8 +409,8 @@ def main(config, output_dir):
     shape1 = all_spectra.shape[1]
 
     # loop through all stars
-    for i in range(0, shape1):
-        gal_lin = np.transpose(all_spectra[:, i])
+    for i in range(0, shape1-1):  # edited : 8/8/24
+        gal_lin = np.transpose(all_spectra[:, i+1])
         galaxy, logLam1, velscale = util.log_rebin(lamRange1, gal_lin.ravel())
         galaxy = galaxy/np.median(galaxy)       # Normalize spectrum to avoid numerical issues
         noise = galaxy*0 + 0.0049               # Assume constant noise per pixel here - new value needed?
@@ -418,7 +427,7 @@ def main(config, output_dir):
     template /= np.median(template[template > 0])  # Normalizes template
 
     sigma = 5       # Velocity dispersion in pixels
-    #shift = 20     # Velocity shift in pixels
+    # shift = 20     # Velocity shift in pixels
     template = np.roll(ndimage.gaussian_filter1d(template, sigma), shift)
     # galaxy = ndimage.gaussian_filter1d(targets[:,brightest_star], 4)
     # noise = t_noise[:,brightest_star]
@@ -430,17 +439,17 @@ def main(config, output_dir):
     # goodpixel = np.arange(100, 3000)
 
     # PPXF
-    velocities, sigma, h3, h4, snr = ppxf_stars(
+    velocities, sigma, h3, h4, snr, sn_pp = ppxf_stars(
         shape1, targets, template, coords, id_list, velscale, t_noise, folder_path, lam, lam_templ)
 
     # save results to file
     x_coords, y_coords = coords[:, 0], coords[:, 1]
     results = pd.DataFrame(
-        {'id': id_list, 'x': x_coords, 'y': y_coords, 'velocity': velocities, 'sigma': sigma, 'snr': snr})
+        {'id': id_list, 'x': x_coords, 'y': y_coords, 'velocity': velocities, 'sigma': sigma, 'snr': snr, 'sn_pp': sn_pp, 'mag': mag_list})
 
     # Results with SNR >3
     results_bright = results[results['snr'] > 5]
-    results.to_csv(f'%s/ppxf_results.csv' % folder_path, index=False)
+    results.to_csv(f'%s/ppxf_results_newtest.csv' % folder_path, index=False)
     results_bright.to_csv(f'%s/ppxf_results_SNR5.csv' % folder_path, index=False)
     print("Results saved to %s/ppxf_results.csv" % folder_path)
 
