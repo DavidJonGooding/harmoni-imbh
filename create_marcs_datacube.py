@@ -158,13 +158,6 @@ def rebin_spectrum_bspline(wavelengths, spectrum, hsim_lam):
     # new_spectrum = bspline(hsim_lam)
 
     new_spectrum = np.interp(hsim_lam, wavelengths, spectrum)   # TODO - test in notebook, compare to bspline
-    plt.plot(hsim_lam, new_spectrum, 'rx-', label='Rebinned spectrum')
-    plt.plot(wavelengths, spectrum, 'k.-', label='Original spectrum')
-    plt.xlabel('Wavelength [Å]')
-    plt.ylabel('Flux [erg/s/cm^2/Å]')
-    plt.title('Rebinned Spectrum')
-    plt.legend()
-    plt.show()
 
     return new_spectrum
 
@@ -276,6 +269,17 @@ def apply_spectra_from_file_vega(datacube, header, p, n_body_file, spec_step, hs
     # Filter stars within the field of view
     window_stars = np.asarray([(x, y, i, j, h, k, v) for x, y, i, j, h, k, v in all_stars
                                if x_start <= x <= x_stop and y_start <= y <= y_stop])
+
+    # TEMPORARY TEST (Sept 2024)
+    #print(len(window_stars))
+    # Sort the stars by magnitude, brightest first
+    #window_stars = window_stars[window_stars[:, 4].argsort()]
+    #window_stars = window_stars[::-1]  # reverse the order to get brightest first
+
+    # Only use the brightest 100 sources
+    #window_stars = window_stars[:100]
+    #print('Using %s brightest sources' % len(window_stars))
+    ###
 
     # Get the magnitudes and line-of-sight velocities
     i_mag, j_mag, h_mag, k_mag, losv = np.transpose(window_stars)[2:]

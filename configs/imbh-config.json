@@ -6,21 +6,21 @@
   "create_marcs_datacube": {
     "output_directory": "output",
     "fov": 10,
-    "ang_res": 0.002,
+    "ang_res": 0.005,
     "spec_step": 0.26,
     "harmoni_blue": 8000,
     "harmoni_red": 25000,
     "band": "H",
     "marcs_directory": "templates",
-    "sources": 2,
+    "sources": 1000,
     "imbh_present": true,
     "nbody_data_imbh": "data/input_HARMONI_IMBH.txt",
     "nbody_data": "data/input_HARMONI.txt",
     "plot": false,
-    "x_start": -0.1,
-    "x_stop": 0.1,
-    "y_start": -0.1,
-    "y_stop": 0.1,
+    "x_start": -1,
+    "x_stop": 1,
+    "y_start": -1,
+    "y_stop": 1,
     "quiet": false,
     "split_parts": 1,
     "overlap": 60
@@ -32,10 +32,10 @@
   },
   "source_extractor": {
     "prepare": true,
-    "flux_file": "/Users/gooding/Desktop/IMBH_PPM/R136_5/rawcube_6093stars_2fov_imbh_reduced_flux_cal.fits",
-    "snr_file": "/Users/gooding/Desktop/IMBH_PPM/R136_5/rawcube_6093stars_2fov_imbh_reduced_SNR.fits",
-    "detection_threshold": 3,
-    "fwhm": 2,
+    "flux_file": "/Users/gooding/Desktop/IMBH_PPM/R136_5_100stars/rawcube_100stars_2fov_imbh_reduced_flux_cal.fits",
+    "snr_file": "/Users/gooding/Desktop/IMBH_PPM/R136_5_100stars/rawcube_100stars_2fov_imbh_reduced_SNR.fits",
+    "detection_threshold": 18,
+    "fwhm": 6,
     "quiet": false
   },
   "auto_pampelmuse": {
@@ -57,7 +57,7 @@
     }
   },
   "losv": {
-    "spectra_path": "/Users/gooding/Desktop/IMBH_PPM/R136_5/spectra_doublemoffat",
+    "spectra_path": "/Users/gooding/Desktop/IMBH_PPM/R136_5_nobh/manual_kept/",
     "template_path": "templates",
     "quiet": false
   }

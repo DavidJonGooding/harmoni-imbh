@@ -134,7 +134,9 @@ def prepare_datacube(flux_file, snr_file, output_dir, quiet):
     hdulist[0].header['EXTNAME'] = 'DATA'
 
     # Save the datacube to a new file
-    hdulist.writeto(path.join(output_dir, 'merged_reduced_SNR_scaled.fits'), overwrite=True)
+    # get directory of flux_file
+    save_dir = os.path.dirname(flux_file)
+    hdulist.writeto(path.join(save_dir, 'reduced_SNR_scaled.fits'), overwrite=True)
     print('Datacube saved successfully.')
 
     cube = hdulist[0].data
@@ -255,6 +257,13 @@ def source_detection(config, cube):
     filename = os.path.join(dir_output, 'sources_f%s_t%s_%s.csv' % (fwhm, thresh, len(sources1) + len(sources2) + len(sources3) + len(sources4) + len(sources5)))
     np.savetxt(filename, sources1, delimiter=",", fmt='%s')
 
+    # Compare sources in 1 and 5
+    compare = np.isclose(sources1['xcentroid'], sources5['xcentroid'], atol=1) & np.isclose(sources1['ycentroid'], sources5['ycentroid'], atol=1)
+    sources1 = sources1[compare]
+    sources5 = sources5[compare]
+
+
+
     # Determine if sources move # TODO - write this function
     # Compare sources1 to sources2, sources2 to sources3, etc.
     # If sources move, discard
@@ -264,7 +273,7 @@ def source_detection(config, cube):
 
 
 # Function to plot the image with detected sources
-def image_plot(config, mean_frame, sources, dir_output):
+def image_plot(config, mean_frame, sources, dir_output, fwhm, thresh):
     """
     Plot the mean frame with detected sources overlaid in red circles.
     """
@@ -277,12 +286,12 @@ def image_plot(config, mean_frame, sources, dir_output):
 
     basename = os.path.basename(config['flux_file'])
     prefix = basename.split('_reduced')[0]
-    plt.savefig(dir_output + '/' + prefix + '_sources.png')
+    plt.savefig(dir_output + '/' + prefix + '_f%s_t%s_%ssources.png' % (fwhm, thresh, len(sources)))
     plt.show()
 
 
 # Function to plot statistics of detected sources
-def stats_plot(config, sources, dir_output):
+def stats_plot(config, sources, dir_output, fwhm, thresh):
     """
     Plot histograms of various source properties such as sharpness, peak, magnitude, and flux.
     """
@@ -308,8 +317,102 @@ def stats_plot(config, sources, dir_output):
 
     basename = os.path.basename(config['flux_file'])
     prefix = basename.split('_reduced')[0]
-    plt.savefig(dir_output + '/' + prefix + '_sources_stats.png')
+    plt.savefig(dir_output + '/' + prefix + '_f%s_t%s_%ssources_stats.png' % (fwhm, thresh, len(sources)))
     plt.show()
+
+
+def extract_spectra(datacube, source_locations):
+    #%%
+    # Extract the spectrum of each star, coadding the central pixel and its neighbours - bit slow
+    spectra_slow = []
+
+    for i in range(len(source_locations)):
+        # For each star, extract the spectrum of the central pixel and its neighbours
+
+        # Define the central pixel
+        x = int(source_locations[i][0])
+        y = int(source_locations[i][1])
+        c = [x,y]
+        #print(c)
+        # Define the coordinates of the central pixel and its neighbours
+        coords = [c, [c[0]-1,c[1]], [c[0]+1,c[1]], [c[0],c[1]-1], [c[0],c[1]+1]]
+        coadd = []
+        #rint(coords)
+        # Extract the spectrum of the central pixel and its neighbours
+        for i in range(0, 5):
+            x = round(coords[i][0])
+            y = round(coords[i][1])
+            #print(x, y)
+            if i == 0:
+                coadd = np.asarray(datacube[:, y, x])
+            else:
+                # Add the spectra of the central pixel and its neighbours
+                coadd = np.add(coadd, np.asarray(datacube[:, y, x]))
+            #print(coadd)
+        # Append the coadded spectrum to the list of spectra
+        spectra_slow.append(coadd)
+
+    # Convert the list of spectra to a numpy array
+    spectra_slow = np.array(spectra_slow)
+    return spectra_slow
+
+
+def create_fits_files(spectra, source_file, source_locations, directory, folderprefix='manual'):
+
+    name = 'HARMONI test'
+
+    # Loop through all the spectra and create a fits file for each and modify the header
+    for i in range(len(spectra)):
+        data = spectra[i]
+        hdu = fits.PrimaryHDU(data)
+        header = hdu.header
+        header['SIMPLE'] = True  # conforms to FITS standard
+        header['BITPIX'] = -64  # data type
+        header['NAXIS'] = 1     # number of array dimensions
+        header['NAXIS1'] = len(data)  # length of the data
+        header['EXTEND'] = True
+        header['CRPIX1'] = 1.0
+        header['CRVAL1'] = 14350.0
+        header['CDELT1'] = 1.0397471334981498
+        header['CTYPE1'] = 'AWAV'
+        header['CUNIT1'] = 'Angstrom'
+        header['WSTART'] = 14350.0
+        header['WSTEP'] = 1.0397471334981498
+
+        # Add additional hierarchical keywords
+        header['HIERARCH PAMPELMUSE SEEING'] = 1.8486651743060374
+        header['HIERARCH STAR ID'] = i
+        header['HIERARCH STAR MAG'] = source_file['H'][i]
+        header['HIERARCH SPECTRUM MULTISTAR'] = 'F'
+        header['OBJNAME'] = name
+        header['HIERARCH SPECTRUM XCUBE'] = source_locations[i][0]
+        header['HIERARCH SPECTRUM YCUBE'] = source_locations[i][1]
+        header['HIERARCH SPECTRUM INFIELD'] = 'T'
+        header['HIERARCH SPECTRUM EDGEDIST'] = 10.870296397982628
+        header['HIERARCH SPECTRUM SNRATIO'] = 7.875363292312141
+        header['HIERARCH SPECTRUM MAG H'] = -29.108641072344618
+        header['HIERARCH SPECTRUM MAG DELTA'] = -21.668060142514285
+        header['HIERARCH SPECTRUM MAG ACCURACY'] = 0.9992447069777514
+        header['HIERARCH SPECTRUM TYPE'] = 'star'
+        header['HIERARCH SPECTRUM QLTFLAG'] = 2
+        header['DATE-GEN'] = time.strftime('%Y-%m-%d %H:%M:%S')
+
+        # make str(i) into 3 digits with 0s
+        if i < 10:
+            fits_file = 'manual_5s_id000' + str(i) + '.fits'
+        elif i < 100:
+            fits_file = 'manual_5s_id00' + str(i) + '.fits'
+        elif i < 1000:
+            fits_file = 'manual_5s_id0' + str(i) + '.fits'
+        else:
+            fits_file = 'manual_5s_id' + str(i) + '.fits'
+        foldername = directory + '/' + folderprefix + '/'
+        if not os.path.exists(foldername):
+            os.makedirs(foldername)
+        hdu.writeto(foldername + fits_file, overwrite=True)
+    print(f'FITS files created successfully with replicated header.')
+    print(f'Saved in {foldername}')
+
 
 
 # Main function that processes the datacube and detects sources
@@ -320,11 +423,12 @@ def main(config, output_dir):
     print('---------------------------------')
 
     # Load the configuration parameters
-    # dir = config['dir']
-    # prefix = config['prefix']
     flux_file = config['flux_file']
     snr_file = config['snr_file']
     quiet = config['quiet']
+    prepare = config['prepare']
+    get_spectra = config['get_spectra']
+    save_dir = os.path.dirname(flux_file)
 
     if not quiet:
         print('Configuration parameters:')
@@ -332,17 +436,17 @@ def main(config, output_dir):
             print(key, '=', value)
 
     # Prepare the datacube for PampelMuse
-    prepare = config['prepare']
     if prepare:
+        print('Preparing datacube for PampelMuse...')
         cube = prepare_datacube(flux_file, snr_file, output_dir, quiet)
         print('Datacube prepared successfully.')
     else:
         # Check for file in dir ending in _SNR_scaled.fits
-        if os.path.isfile(path.join(output_dir, 'merged_reduced_SNR_scaled.fits')):
+        if os.path.isfile(path.join(save_dir, 'reduced_SNR_scaled.fits')):
             print('Datacube already prepared.')
-            hdulist = fits.open(path.join(output_dir, 'merged_reduced_SNR_scaled.fits'))
+            hdulist = fits.open(path.join(save_dir, 'reduced_SNR_scaled.fits'))
             hdulist.info()
-            cube = hdulist[1].data
+            cube = hdulist[0].data
             print('Datacube loaded successfully.')
         else:
             print('Datacube not prepared. Please set prepare to True in the configuration file.')
@@ -381,7 +485,8 @@ def main(config, output_dir):
 
     # Save source information to a CSV file
     print('Saving CSV files...')
-    dir_output = path.join(output_dir, 'sources')
+    # dir_output = path.join(output_dir, 'sources')
+    dir_output = os.path.dirname(config['flux_file']) + '/sources'
 
     # Check if the directory exists, if not create it
     if not os.path.exists(dir_output):
@@ -404,11 +509,27 @@ def main(config, output_dir):
           (fwhm, thresh, len(sources)))
 
     # Plot the mean frame with the sources overlaid in red
-    image_plot(config, mean_frame, sources, dir_output)
-    stats_plot(config, sources, dir_output)
+    image_plot(config, mean_frame, sources, dir_output, thresh, fwhm)
+    stats_plot(config, sources, dir_output, thresh, fwhm)
 
+    # Prepare inputs for fits file generation
+    source_file = pd.read_csv(dir_output + '/harmoni_stars_f%s_t%s_%s_refcat.csv' % (fwhm, thresh, len(sources)))
+    source_file = source_file.sort_values(by='H', ascending=True)
 
-    ## TEMPORARY SPECTRUM EXTRACTOR
+    source_locations = source_file[['x', 'y']].to_numpy()
+
+    if get_spectra:
+        print('Extracting spectra...')
+        # Extract the spectra of the sources
+        spectra = extract_spectra(cube, sources['xcentroid', 'ycentroid'])
+
+        # Create fits files for the spectra
+        create_fits_files(spectra, source_file, source_locations, dir_output, folderprefix='autospectra')
+        print('Spectra extracted and saved successfully.')
+    else:
+        print('Spectra not extracted. Please set get_spectra to True in the configuration file if needed.')
+
+    print('---------------  Finished  ---------------')
 
 if __name__ == '__main__':
     # Read the configuration file from the command line argument

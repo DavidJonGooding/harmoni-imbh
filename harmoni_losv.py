@@ -41,6 +41,7 @@ def fits_to_array(folder_path):
             file_path = os.path.join(folder_path, filename)
 
             with fits.open(file_path) as hdul:
+                ignore_missing_simple=True
                 data = hdul[0].data
                 header = hdul[0].header
 
@@ -95,6 +96,12 @@ def fits_to_array(folder_path):
 
     # Rescale coordinate to be 0-indexed and in arcseconds
     coords = (np.asarray(coords_list)/100)-1
+
+    # Order everything in increasing magnitude
+    #numpy_array = numpy_array[:, np.argsort(mag_list)]
+    #coords = coords[np.argsort(mag_list)]
+    #id_list = [x for _, x in sorted(zip(mag_list, id_list))]
+    #mag_list = sorted(mag_list)
 
     return numpy_array, coords, id_list, mag_list
 
@@ -203,10 +210,11 @@ def ppxf_fit_and_clean(templates, galaxy, velscale, start, mask0, lam, lam_temp,
         plt.subplot(122)
         pp.plot()
 
-    return pp, optimal_template, sn
+    return pp, optimal_template, sn, pp.chi2
 
 
-def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, folder_path, lam, lam_temp, plot=True):
+def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, folder_path, lam, lam_temp, mag_list,
+               plot=True):
     # set up arrays for output parameters
     # velocities = np.empty(all_spectra.shape[1]-1)
     sigma = np.empty(shape1-1)
@@ -215,6 +223,7 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
     velocities = []
     snr = []
     snr_ppxf = []
+    chi2_ppxf = []
 
     # Dubugging printing
     print('Shape1:', shape1)
@@ -257,7 +266,7 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
         #          degree=4, vsyst=0)
 
         #
-        pp, optimal_template, sn = ppxf_fit_and_clean(
+        pp, optimal_template, sn, chi2 = ppxf_fit_and_clean(
             template, star, velscale, start, mask0, lam=lam, lam_temp=lam_temp, plot=False)
         # txt = f"Global spectrum; $\\sigma$={pp.sol[1]:.0f} km/s; S/N={sn:.1f}"
         # print(txt + '\n' + '#'*78)
@@ -275,10 +284,11 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
         snr_star = median_flux / biweight_sigma
         snr = np.append(snr, snr_star)
         snr_ppxf = np.append(snr_ppxf, sn)
+        chi2_ppxf = np.append(chi2_ppxf, chi2)
 
         print('SNR:', snr_star, sn)
 
-        if plot:
+        if plot and snr_star > 5:
             # plot and print results
             pp.plot()
             plt.title(f'Star {id_list[k]} - velocity = {pp.sol[0]:.2f} km/s, snr = {sn:.2f}')
@@ -287,7 +297,7 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
             # save plot and create directory
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
-            plt.savefig(f'%s/star_{id_list[k]}.png' % plot_path)
+            plt.savefig(f'%s/mag{mag_list[k]}_star_{id_list[k]}.png' % plot_path)
             # clear plot for next iteration
             plt.clf()
 
@@ -295,7 +305,7 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
         #print("     dV    dsigma   dh3      dh4")
         #print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
 
-    return velocities, sigma, h3, h4, snr, snr_ppxf
+    return velocities, sigma, h3, h4, snr, snr_ppxf, chi2_ppxf
 
 
 # Define a function to load spectra from PampelMuse prm file
@@ -439,13 +449,14 @@ def main(config, output_dir):
     # goodpixel = np.arange(100, 3000)
 
     # PPXF
-    velocities, sigma, h3, h4, snr, sn_pp = ppxf_stars(
-        shape1, targets, template, coords, id_list, velscale, t_noise, folder_path, lam, lam_templ)
+    velocities, sigma, h3, h4, snr, sn_pp, chi2_pp = ppxf_stars(
+        shape1, targets, template, coords, id_list, velscale, t_noise, folder_path, lam, lam_templ, mag_list)
 
     # save results to file
     x_coords, y_coords = coords[:, 0], coords[:, 1]
     results = pd.DataFrame(
-        {'id': id_list, 'x': x_coords, 'y': y_coords, 'velocity': velocities, 'sigma': sigma, 'snr': snr, 'sn_pp': sn_pp, 'mag': mag_list})
+        {'id': id_list, 'x': x_coords, 'y': y_coords, 'velocity': velocities, 'sigma': sigma,
+         'snr': snr, 'sn_pp': sn_pp, 'mag': mag_list, 'chi2_pp': chi2_pp})
 
     # Results with SNR >3
     results_bright = results[results['snr'] > 5]
