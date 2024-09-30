@@ -20,6 +20,7 @@ import random
 from scipy import ndimage
 from astropy.stats import biweight_scale
 import math
+import losv_fitting
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -39,6 +40,7 @@ def fits_to_array(folder_path):
     for filename in os.listdir(folder_path):
         if filename.endswith('.fits') and 'id' in filename:
             file_path = os.path.join(folder_path, filename)
+            print(file_path)
 
             with fits.open(file_path) as hdul:
                 ignore_missing_simple=True
@@ -247,7 +249,7 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
     # gives 279, LMC estimate based on redshift of 0.00093 and literature stating 287 km s-1
     start = [vel, 0.19]  # (km/s), starting guess for [V, sigma] -- start = [velStart, sigmaStart]
 
-    goodpixel = np.arange(100, 3500)
+    goodpixel = np.arange(200, 3500)
 
     # make initial mask based on goodpixel
     mask0 = np.zeros_like(targets[:, 0], dtype=bool)
@@ -259,39 +261,34 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
         if math.isnan(t_noise[0][k]) is True:
             continue
 
-        star = ndimage.gaussian_filter1d(targets[:, k], 4)
+        star = targets[:, k]#ndimage.gaussian_filter1d(targets[:, k], 4)
 
         #pp = ppxf(template, star, t_noise[:, k], velscale, start,
         #          goodpixels=goodpixel, plot=False, moments=2,
         #          degree=4, vsyst=0)
 
         #
-        pp, optimal_template, sn, chi2 = ppxf_fit_and_clean(
-            template, star, velscale, start, mask0, lam=lam, lam_temp=lam_temp, plot=False)
-        # txt = f"Global spectrum; $\\sigma$={pp.sol[1]:.0f} km/s; S/N={sn:.1f}"
-        # print(txt + '\n' + '#'*78)
-        # plt.title(txt)
+        pp, snr_star = losv_fitting.get_losv(star, lam, template, lam_temp)
+        #pp, optimal_template, sn, chi2 = ppxf_fit_and_clean(template, star, velscale, start, mask0, lam=lam, lam_temp=lam_temp, plot=False)
 
         velocities = np.append(velocities, pp.sol[0])
         sigma[k-1] = pp.sol[1]
-        # h3[k-1] = pp.sol[2]
-        # h4[k-1] = pp.sol[3]
 
         # SNR calc
-        residuals = star[goodpixel] - pp.bestfit[goodpixel]
-        median_flux = np.median(star[goodpixel])
-        biweight_sigma = biweight_scale(residuals)
-        snr_star = median_flux / biweight_sigma
+        #residuals = star[goodpixel] - pp.bestfit[goodpixel]
+        #median_flux = np.median(star[goodpixel])
+        #biweight_sigma = biweight_scale(residuals)
+        #snr_star = median_flux / biweight_sigma
         snr = np.append(snr, snr_star)
-        snr_ppxf = np.append(snr_ppxf, sn)
-        chi2_ppxf = np.append(chi2_ppxf, chi2)
+        snr_ppxf = np.append(snr_ppxf, snr_star)
+        chi2_ppxf = np.append(chi2_ppxf, pp.chi2)
 
-        print('SNR:', snr_star, sn)
+        #print('SNR:', snr_star, sn)
 
         if plot and snr_star > 5:
             # plot and print results
             pp.plot()
-            plt.title(f'Star {id_list[k]} - velocity = {pp.sol[0]:.2f} km/s, snr = {sn:.2f}')
+            plt.title(f'Star {id_list[k]} - velocity = {pp.sol[0]:.2f} km/s, snr = {snr_star:.2f}')
             # add coordinates as text to plot
             plt.text(0.6, 0.95, f'x = {coords[k][0]:.4f}, y = {coords[k][1]:.4f}', transform=plt.gca().transAxes)
             # save plot and create directory
@@ -300,10 +297,6 @@ def ppxf_stars(shape1, targets, template, coords, id_list, velscale, t_noise, fo
             plt.savefig(f'%s/mag{mag_list[k]}_star_{id_list[k]}.png' % plot_path)
             # clear plot for next iteration
             plt.clf()
-
-        #print("Formal errors:")
-        #print("     dV    dsigma   dh3      dh4")
-        #print("".join("%8.2g" % f for f in pp.error*np.sqrt(pp.chi2)))
 
     return velocities, sigma, h3, h4, snr, snr_ppxf, chi2_ppxf
 
@@ -388,6 +381,7 @@ def main(config, output_dir):
     folder_path = config['spectra_path']
     template_path = config['template_path']
     quiet = config['quiet']
+    plot = config['plot']
 
     if not quiet:
         print('Configuration parameters:')
@@ -402,12 +396,6 @@ def main(config, output_dir):
     # template_path = '/Users/gooding/Desktop/IMBH/templates/MARCS_library/'
     templ, lam_templ = open_marcs_spectra(template_path, quiet)
 
-    # Pre-processing - Perform 1D convolution of the template with the spectra to match the resolution
-    sigma = 3
-    shift = 0
-    template = np.roll(ndimage.gaussian_filter1d(templ, sigma), shift)
-    # print(template.shape)
-
     # pPXF preparation
 
     lamRange1 = np.transpose([np.min(all_spectra[:, 0]), np.max(all_spectra[:, 0])])
@@ -418,39 +406,31 @@ def main(config, output_dir):
 
     shape1 = all_spectra.shape[1]
 
-    # loop through all stars
-    for i in range(0, shape1-1):  # edited : 8/8/24
-        gal_lin = np.transpose(all_spectra[:, i+1])
-        galaxy, logLam1, velscale = util.log_rebin(lamRange1, gal_lin.ravel())
-        galaxy = galaxy/np.median(galaxy)       # Normalize spectrum to avoid numerical issues
-        noise = galaxy*0 + 0.0049               # Assume constant noise per pixel here - new value needed?
+    # loop through all stars - log rebinning and normalising spectra
+    #for i in range(0, shape1-1):  # edited : 8/8/24
+    #    gal_lin = np.transpose(all_spectra[:, i+1])
+    #    galaxy, logLam1, velscale = util.log_rebin(lamRange1, gal_lin.ravel())
+    #    galaxy = galaxy/np.median(galaxy)       # Normalize spectrum to avoid numerical issues
+    #    noise = galaxy*0 + 0.0049               # Assume constant noise per pixel here - new value needed?
+    #
+    #    targets[:, i] = galaxy   # store galaxy spectra in targets array
+    #    t_noise[:, i] = noise    # store noise in t_noise array
+    #
+    #lam = np.exp(logLam1)
 
-        targets[:, i] = galaxy   # store galaxy spectra in targets array
-        t_noise[:, i] = noise    # store noise in t_noise array
+    # log_rebin the template spectra and normalize
+    #template, ln_lambda = util.log_rebin(lam_templ, templ, velscale=velscale)[:2]
+    #template /= np.median(template[template > 0])  # Normalizes template
+    #lam_templ = np.exp(ln_lambda)
+    template = templ
+    velscale = 1
+    lam = all_spectra[:, 0]
 
-    lam = np.exp(logLam1)
-
-    # velscale_ratio = 2  # adopts 2x higher spectral sampling for templates than for galaxy
-    # lamRange2 = np.array([np.min(wavelengths), np.max(wavelengths)])
-
-    template, ln_lambda = util.log_rebin(lam_templ, templ, velscale=velscale)[:2]
-    template /= np.median(template[template > 0])  # Normalizes template
-
-    sigma = 5       # Velocity dispersion in pixels
-    # shift = 20     # Velocity shift in pixels
-    template = np.roll(ndimage.gaussian_filter1d(template, sigma), shift)
-    # galaxy = ndimage.gaussian_filter1d(targets[:,brightest_star], 4)
-    # noise = t_noise[:,brightest_star]
-
-    # template = template*np.median(galaxy)/np.median(template)
-
-    lam_templ = np.exp(ln_lambda)
-
-    # goodpixel = np.arange(100, 3000)
+    targets = all_spectra[:, 1:]
 
     # PPXF
     velocities, sigma, h3, h4, snr, sn_pp, chi2_pp = ppxf_stars(
-        shape1, targets, template, coords, id_list, velscale, t_noise, folder_path, lam, lam_templ, mag_list)
+        shape1, targets, template, coords, id_list, velscale, t_noise, folder_path, lam, lam_templ, mag_list, plot=plot)
 
     # save results to file
     x_coords, y_coords = coords[:, 0], coords[:, 1]
@@ -460,8 +440,8 @@ def main(config, output_dir):
 
     # Results with SNR >3
     results_bright = results[results['snr'] > 5]
-    results.to_csv(f'%s/ppxf_results_newtest.csv' % folder_path, index=False)
-    results_bright.to_csv(f'%s/ppxf_results_SNR5.csv' % folder_path, index=False)
+    results.to_csv(f'%s/ppxf_results_test.csv' % folder_path, index=False)
+    results_bright.to_csv(f'%s/ppxf_results_SNR5test.csv' % folder_path, index=False)
     print("Results saved to %s/ppxf_results.csv" % folder_path)
 
     print("HARMONI LOSV routine complete.")
