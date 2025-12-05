@@ -43,7 +43,7 @@ pip install -r requirements.txt
 
 1. Data: outputs from MICADO N-body simulations of a star cluster with and without a central IMBH
 2. Templates: spectra from MARCS library
-3. Configs: files which are used to choose settings on python routines
+3. Configs: files which are used to choose settings on Python routines
 
 ### Dependencies
 
@@ -59,4 +59,5 @@ The N-body simulation data is courtesy of Fiorentino et al. (2020), found at: ht
 
 Written by David Gooding, DPhil student at the Department of Astrophysics, University of Oxford.
 
-Contact: david.gooding@physics.ox.ac.uk
+Contact: david.gooding@physics.ox.ac.uk [expired]
+try Michele.Cappellari@physics.ox.ac.uk or Niranjan.Thatte@physics.ox.ac.uk instead
